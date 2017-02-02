@@ -1,0 +1,53 @@
+
+                        Operating Systems Design
+                              Spring 2017
+                               Project 1
+
+
+turnin id:  osd_p1
+
+
+Subsequent projects will not build on this one; however, code developed
+here may be useful in later projects.
+
+Write a program that implements the SLIP protocol (RFC 1055) to copy
+data from one process to a second process via a socketpair.  Note that,
+although it does not provide great performance, this version of SLIP
+writes (and reads) just one byte at a time.
+
+The original process should establish a socketpair for the two processes
+to communcate and then create the second process.  The first process should
+then read a file named "infile" and pass the contents to the second process
+using SLIP via the socketpair.  Use the RFC1055 *maximum* packet size of
+1006 bytes.  However, do not pad to have all packets be the same size.
+
+The second process should receive the data and create a copy of it by
+writing the received data into a file named "outfile".
+
+Note that infile may contain any 8-bit value in each byte, i.e. the bytes
+will not all necessarily be printable characters.  Each time that your
+program sends an ESC, ESC_ESC, or ESC_END character, it should print a
+one-line message notifying the user; it should NOT print a message about
+sending simple END characters.
+
+Testing will go something like this:
+    rm -rf infile outfile
+    cp some_file infile
+    ./p1 
+    cmp infile outfile    # <-- works for binary also
+
+
+Submitting the project for grading:
+
+You should use turnin to submit a tar file containing all of the required
+files, including source code, makefile, etc.
+
+The project should compile and link as p1.
+
+To build the project, I will cd to my directory containing your files
+and simply type:
+
+    rm -rf p1
+    rm -rf *.o
+    make
+
