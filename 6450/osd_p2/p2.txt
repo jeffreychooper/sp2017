@@ -1,0 +1,83 @@
+
+                        Operating Systems Design
+                              Spring 2017
+                               Project 2
+
+
+turnin id:  osd_p2
+
+
+Write a simple interpreter that configures a described virtual network of
+switches, routers, and hosts, and then requests that specified operations
+be executed on those systems.
+
+The interpreter will take its primary input from a file which is specified
+as the only cmd-line arg.
+
+The language to be interpreted:
+
+    # config info must come first (comments begin with a #)
+    vs  s1  1   # defines the "1" network
+                # a switch is basically just a cable that fwds ethernet packets)
+                # switches know macaddrs but not IPaddrs
+    vs  s2  2   # defines the "2" network
+    vh  h1  101 1.1           # name, mac-ip pairs (all macs 100+)
+    vr  r1  102 1.2  103 2.1  # vr -> router AND host (will have IP addrs)
+                              # name, mac-ip pairs (up to 6 pairs total)
+    vh  h3  104 2.2           # name, mac-ip pairs (all macs 100+)
+
+    # operations using the nets can only be performed after all config is done
+    prt hello world    # only executed by the interpreter - for debugging
+                       # no args means print a blank line
+    macsend hello_from_h1 101 102   # will be forwarded by vs 1
+    pause tty    # prints "press return to continue"
+    macsend howdy_from_h2 103 104   # will be forwarded by vs 2
+    pause 3      # prints nothing
+    macsend badsend 101 104  # fails - not on same net
+    pause tty    # prints "press return to continue"
+    macsend bcastmsg_from_h1 101 255  # 255 (all 1's in a byte) implies bcast
+                                      # (handled by switch; goes to from_host also)
+                                      # 255 bcast could be used for ARP-like stuff
+    pause 3
+
+Switches can only be connected to hosts or routers, not to other switches.
+Assume there will be a max of 6 switches, and a max of 6 connections to each switch.
+
+Our macsend (link-layer) packet format is:
+
+    dest mac  1 byte  (macaddr 101 can be stored in 1 byte)
+    src  mac  1 byte  (macaddr 101 can be stored in 1 byte)
+    type      1 byte  (0 here for demo macsend - future types may be arp, etc)
+    length    1 byte  (entire packet length) 
+                      # assume our length can not exceed 100 + header
+                      #   thus, we may need to split packets at IP layer above
+    payload   0-100 bytes  (because our max packet len is 100 + header)
+
+Printing will be tailored to each project.
+
+Switches print nothing during normal operation, but print a message if they 
+discard a packet bound for a macaddr that is not connected to the switch.
+
+Sending hosts print:
+    from_hostname:  macsend to to_hostname on from_macaddr: payload
+
+Receiving hosts print:
+    to_hostname:  macsend from from_hostname on to_macaddr: payload
+
+
+Submitting the project for grading:
+
+You should use turnin to submit a tar file containing all of the required
+files, including source code, makefile, etc.
+
+The project should compile and link as p2.
+
+To build the project, I will cd to my directory containing your files
+and simply type:
+
+    rm -rf p2
+    rm -rf *.o
+    make
+
+I will run p2 with one or more test files, e.g.:
+    ./p2 test_filename
