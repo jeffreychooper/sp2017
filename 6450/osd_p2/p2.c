@@ -3,14 +3,29 @@
 
 int main(int argc, char *argv[])
 {
-    int i, j;
-    char *p, line[1000];
-    char args[16][128];
+	// interpret the file given by the user
+	if(argc < 2)
+	{
+		printf("Usage: ./p2 filename\n");
+		return 1;
+	}
+
+	char *filename = argv[1];
+
+	FILE *userFile = fopen(filename, 'r');
+
+	
+
+
+
+
+
+
 
     while (fgets(line,1000,stdin) != NULL)
     {
-	line[strlen(line)-1] = '\0';  /* overlay \n */
-	printf("LINE=:%s:\n",line);
+		line[strlen(line)-1] = '\0';  /* overlay \n */
+		printf("LINE=:%s:\n",line);
 	if (p = (strchr(line,'#')))
 	{
 	    *p = '\0';
@@ -35,4 +50,6 @@ int main(int argc, char *argv[])
             }
         }
     }
+
+	return 0;
 }
