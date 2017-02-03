@@ -1,0 +1,41 @@
+
+                        Parallel Processing
+                            Project 2
+                           Spring 2017
+
+
+turnin code: pp_p2
+
+
+Enhance p1 by supplying a port number to each of the ranks so they
+can use it in MPI_Init etc.  It can be used to connect back to the
+process running mpiexec and retrieve information such as how to 
+contact other ranks.
+
+Then, implement your own MPI that supports the following functions:
+
+    MPI_Comm_rank 	
+    MPI_Comm_size 	
+    MPI_Finalize 	
+    MPI_Init 	
+    MPI_Send (just wrapper for Ssend)
+    MPI_Ssend
+    MPI_Recv
+    MPI_Barrier
+
+You only need to support MPI_COMM_WORLD for this project.
+
+Place your object code into a library named libpp.a which 
+test files can link against.
+
+Compile and link the program previously named p1 as ppexec.
+
+Have a makefile that will build libpp.a and compile and link
+ppexec as well as any test programs that we develop.
+
+I will cd to my dir containing your project files and type:
+    rm -f libpp.a
+    rm -f *.o
+    make
+
+Use turnin as in p1.
