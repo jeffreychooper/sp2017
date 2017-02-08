@@ -1,4 +1,4 @@
-// TODO: try rewriting to allocate memory at runtime as needed, rather than using #defines
+// TODO: try rewriting to allocate memory at runtime as needed, rather than using #defines... compare performance?
 #include <stdio.h>
 #include <string.h>
 
