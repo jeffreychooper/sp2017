@@ -62,7 +62,18 @@ int main(int argc, char *argv[])
 		}
 		else
 		{
+			if(p = strtok(line, " \t"))
+			{
+				strcpy(operations[lineCount][0], p);
 
+				for(tokenIndex = 1; tokenIndex < MAX_LINE_TOKENS; tokenIndex++)
+				{
+					if(p = strtok(NULL, " \t"))
+						strcpy(operations[lineCount][tokenIndex], p);
+					else
+						break;
+				}
+			}
 		}
 
 		lineCount++;
