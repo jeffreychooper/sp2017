@@ -1,11 +1,13 @@
 // TODO: try rewriting to allocate memory at runtime as needed, rather than using #defines... compare performance?
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
-#define MAX_LINE_LENGTH 1000
-#define CONFIG_START_SIZE 20
-#define MAX_LINE_TOKENS 10
-#define MAX_TOKEN_LENGTH 128
+#define MAX_LINE_LENGTH 896
+#define CONFIG_MAX_SIZE 42
+#define OPERATIONS_START_SIZE 20
+#define MAX_LINE_TOKENS 14
+#define MAX_TOKEN_LENGTH 64
 
 int main(int argc, char *argv[])
 {
@@ -23,8 +25,8 @@ int main(int argc, char *argv[])
 	char line[MAX_LINE_LENGTH];		// hold the lines as they're read from the file
 	char *p;						// general use pointer
 
-	char config[CONFIG_START_SIZE][MAX_LINE_TOKENS][MAX_TOKEN_LENGTH];					// the configuration specified in the file
-	char operations[CONFIG_START_SIZE][MAX_LINE_TOKENS][MAX_TOKEN_LENGTH];				// the operations specified in the file
+	char config[CONFIG_MAX_SIZE][MAX_LINE_TOKENS][MAX_TOKEN_LENGTH];										// the configuration specified in the file
+	char ***operations = malloc(OPERATIONS_START_SIZE * MAX_LINE_TOKENS * MAX_TOKEN_LENGTH * sizeof(char));	// the operations specified in the file
 
 	int configDone = 0;
 	int lineCount = 0;
@@ -43,7 +45,6 @@ int main(int argc, char *argv[])
 			lineCount = 0;
 		}
 
-		// TODO: if I go over the starting line count, need to get more space
 
 		if(!configDone)
 		{
@@ -64,6 +65,7 @@ int main(int argc, char *argv[])
 		}
 		else
 		{
+			// TODO: if I go over the starting line count, need to get more space
 			if(p = strtok(line, " \t"))
 			{
 				strcpy(operations[lineCount][0], p);
