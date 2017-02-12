@@ -1,4 +1,4 @@
-
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -75,7 +75,7 @@ int main(int argc, char *argv[])
 		for(int j = 0; j < MAX_LINE_TOKENS; j++)
 		{
 			// TODO: free
-			operations[i][j] = malloc(MAX_TOKEN_LENGTH * sizeof(char));
+			operations[i][j] = calloc(MAX_TOKEN_LENGTH, sizeof(char));
 		}
 	}
 
@@ -83,6 +83,8 @@ int main(int argc, char *argv[])
 	int lineCount = 0;
 	int tokenIndex = 0;
 	int currMaxOperations = OPERATIONS_START_ELEMENTS;
+	int numConfig = 0;
+	int numOperations = 0;
 
 	while(fgets(line, MAX_LINE_LENGTH, userFile) != NULL)
 	{
@@ -112,6 +114,7 @@ int main(int argc, char *argv[])
 						break;
 				}
 
+				numConfig++;
 				lineCount++;
 			}
 		}
@@ -133,7 +136,7 @@ int main(int argc, char *argv[])
 					for(int j = 0; j < MAX_LINE_TOKENS; j++)
 					{
 						// TODO: free
-						operations[i][j] = malloc(MAX_TOKEN_LENGTH * sizeof(char));
+						operations[i][j] = calloc(MAX_TOKEN_LENGTH, sizeof(char));
 					}
 				}
 			}
@@ -150,6 +153,7 @@ int main(int argc, char *argv[])
 						break;
 				}
 
+				numOperations++;
 				lineCount++;
 			}
 		}
@@ -158,9 +162,50 @@ int main(int argc, char *argv[])
 
 	fclose(userFile);
 
-	// set up the network
+	SwitchInfo switches[6];
+	RouterInfo routers[36];
+	HostInfo hosts[36];
+	int numSwitches = 0;
+	int numRouters = 0;
+	int numHosts = 0;
 
-	// complete the specified operations
+	for(int i = 0; i < numConfig; i++)
+	{
+		switch(config[i][0][1])
+		{
+			case 's':
+				switches[numSwitches].netNumber = (unsigned char)atoi(config[i][2]);
+				numSwitches++;
+				break;
+			case 'r':
+				for(int j = 2; config[i][j][0] != 0; j += 2)
+				{
+					routers[numRouters].MACs[(j - 2) / 2] = (unsigned char)atoi(config[i][j]);
+					
+					if(p = strtok(config[i][j + 1], "."))
+					{
+						routers[numRouters].netIPs[(j - 2) / 2] = (unsigned char)atoi(p);
+
+						if(p = strtok(NULL, " \0"))
+							routers[numRouters].hostIPs[(j - 2) / 2] = (unsigned char)atoi(p);
+					}
+				}
+				numRouters++;
+				break;
+			case 'h':
+				hosts[numHosts].MAC = (unsigned char)atoi(config[i][2]);
+
+				if(p = strtok(config[i][3], "."))
+				{
+					hosts[numHosts].netIP = (unsigned char)atoi(p);
+
+					if(p = strtok(NULL, " \0"))
+						hosts[numHosts].hostIP = (unsigned char)atoi(p);
+				}
+				numHosts++;
+				break;
+		}
+	}
 
 	return 0;
 }
