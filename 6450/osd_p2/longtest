@@ -1,0 +1,30 @@
+vs	s1	1
+vs	s2	2
+vh	h1	101	1.1
+vr	r1	102	1.2	103	2.1
+vh	h2	104	2.2
+
+prt hello world
+macsend hello_from_h1 101 102
+pause tty
+macsend howdy_from_h2 103 104
+pause 3
+macsend badsend 101 104		# FAILS
+pause tty
+macsend bcastmsg_from_h1 101 255
+prt hello world
+macsend hello_from_h1 101 102
+pause tty
+macsend howdy_from_h2 103 104
+pause 3
+macsend badsend 101 104		# FAILS
+pause tty
+macsend bcastmsg_from_h1 101 255
+prt hello world
+macsend hello_from_h1 101 102
+pause tty
+macsend howdy_from_h2 103 104
+pause 3
+macsend badsend 101 104		# FAILS
+pause tty
+macsend bcastmsg_from_h1 101 255

@@ -8,6 +8,7 @@
 #define OPERATIONS_START_ELEMENTS 20
 #define MAX_LINE_TOKENS 14
 #define MAX_TOKEN_LENGTH 64
+#define EXTRA_OPERATIONS 10
 
 int main(int argc, char *argv[])
 {
@@ -45,6 +46,7 @@ int main(int argc, char *argv[])
 	int configDone = 0;
 	int lineCount = 0;
 	int tokenIndex = 0;
+	int currMaxOperations = OPERATIONS_START_ELEMENTS;
 
 	while(fgets(line, MAX_LINE_LENGTH, userFile) != NULL)
 	{
@@ -79,7 +81,27 @@ int main(int argc, char *argv[])
 		}
 		else
 		{
-			// TODO: if I go over the starting line count, need to get more space
+			if(lineCount >= currMaxOperations)
+			{
+				int prevMaxOperations = currMaxOperations;
+				currMaxOperations += EXTRA_OPERATIONS;
+
+				// TODO: free
+				operations = realloc(operations, currMaxOperations * sizeof(char**));
+
+				for(int i = prevMaxOperations; i < currMaxOperations; i++)
+				{
+					// TODO: free
+					operations[i] = malloc(MAX_LINE_TOKENS * sizeof(char *));
+
+					for(int j = 0; j < MAX_LINE_TOKENS; j++)
+					{
+						// TODO: free
+						operations[i][j] = malloc(MAX_TOKEN_LENGTH * sizeof(char));
+					}
+				}
+			}
+
 			if(p = strtok(line, " \t"))
 			{
 				strcpy(operations[lineCount][0], p);
