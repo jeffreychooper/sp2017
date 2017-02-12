@@ -1,5 +1,4 @@
-// TODO: try rewriting to allocate memory at runtime as needed, rather than using #defines... compare performance?
-#include <stdio.h>
+
 #include <string.h>
 #include <stdlib.h>
 
@@ -9,6 +8,43 @@
 #define MAX_LINE_TOKENS 14
 #define MAX_TOKEN_LENGTH 64
 #define EXTRA_OPERATIONS 10
+
+enum NodeType { SWITCH, ROUTER, HOST };
+
+// switch information
+typedef struct {
+
+unsigned char netNumber;
+unsigned char knownMACs[6];
+int interfaces[6];
+
+} SwitchInfo;
+
+// router information
+typedef struct {
+
+unsigned char MACs[6];
+unsigned char netIPs[6];
+unsigned char hostIPs[6];
+int interfaces[6];
+int interpreterFD;
+
+} RouterInfo;
+
+// host information
+typedef struct {
+
+unsigned char MAC;
+unsigned char netIP;
+unsigned char hostIP;
+int inferface;
+int interpreterFD;
+
+} HostInfo;
+
+void ActAsSwitch();
+void ActAsRouter();
+void ActAsHost();
 
 int main(int argc, char *argv[])
 {
@@ -121,6 +157,10 @@ int main(int argc, char *argv[])
 	}
 
 	fclose(userFile);
+
+	// set up the network
+
+	// complete the specified operations
 
 	return 0;
 }
