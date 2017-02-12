@@ -5,7 +5,7 @@
 
 #define MAX_LINE_LENGTH 896
 #define CONFIG_MAX_SIZE 42
-#define OPERATIONS_START_SIZE 20
+#define OPERATIONS_START_ELEMENTS 20
 #define MAX_LINE_TOKENS 14
 #define MAX_TOKEN_LENGTH 64
 
@@ -25,8 +25,22 @@ int main(int argc, char *argv[])
 	char line[MAX_LINE_LENGTH];		// hold the lines as they're read from the file
 	char *p;						// general use pointer
 
-	char config[CONFIG_MAX_SIZE][MAX_LINE_TOKENS][MAX_TOKEN_LENGTH];										// the configuration specified in the file
-	char ***operations = malloc(OPERATIONS_START_SIZE * MAX_LINE_TOKENS * MAX_TOKEN_LENGTH * sizeof(char));	// the operations specified in the file
+	char config[CONFIG_MAX_SIZE][MAX_LINE_TOKENS][MAX_TOKEN_LENGTH];				// the configuration specified in the file
+
+	// TODO: free
+	char ***operations = malloc(OPERATIONS_START_ELEMENTS * sizeof(char**));		// the operations specified in the file
+
+	for(int i = 0; i < OPERATIONS_START_ELEMENTS; i++)
+	{
+		// TODO: free
+		operations[i] = malloc(MAX_LINE_TOKENS * sizeof(char *));
+
+		for(int j = 0; j < MAX_LINE_TOKENS; j++)
+		{
+			// TODO: free
+			operations[i][j] = malloc(MAX_TOKEN_LENGTH * sizeof(char));
+		}
+	}
 
 	int configDone = 0;
 	int lineCount = 0;
