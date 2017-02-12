@@ -207,5 +207,31 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	// add switch known macs
+	for(int i = 0; i < numSwitches; i++)
+	{
+		int knownMACs = 0;
+		for(int j = 0; j < numRouters; j++)
+		{
+			for(int k = 0; routers[j].netIPs[k] != 0; k++)
+			{
+				if(routers[j].netIPs[k] == switches[i].netNumber)
+				{
+					switches[i].knownMACs[knownMACs] = routers[j].MACs[k];
+					knownMACs++;
+				}
+			}
+		}
+
+		for(int j = 0; j < numHosts; j++)
+		{
+			if(hosts[j].netIP == switches[i].netNumber)
+			{
+				switches[i].knownMACs[knownMACs] = hosts[j].MAC;
+				knownMACs++;
+			}
+		}
+	}
+
 	return 0;
 }
