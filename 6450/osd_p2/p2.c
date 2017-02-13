@@ -1,6 +1,12 @@
+// SOCKPAIR SIDES
+// 0 interpreter-host/router 1
+// 0 switch-router/host 1
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #define MAX_LINE_LENGTH 896
 #define CONFIG_MAX_SIZE 42
@@ -42,9 +48,10 @@ int interpreterFD;
 
 } HostInfo;
 
-void ActAsSwitch();
-void ActAsRouter();
-void ActAsHost();
+void FreeOperationsMemory(char ***operations, int currMaxOperations);
+void ActAsSwitch(SwitchInfo *switchInfo);
+void ActAsRouter(RouterInfo *routerInfo);
+void ActAsHost(HostInfo *hostInfo);
 
 int main(int argc, char *argv[])
 {
@@ -162,12 +169,15 @@ int main(int argc, char *argv[])
 
 	fclose(userFile);
 
-	SwitchInfo switches[6];
-	RouterInfo routers[36];
-	HostInfo hosts[36];
+	SwitchInfo switches[6] = {{ 0 }};
+	RouterInfo routers[36] = {{ 0 }};
+	HostInfo hosts[36] = {{ 0 }};
 	int numSwitches = 0;
 	int numRouters = 0;
 	int numHosts = 0;
+	// TODO: close all of these
+	int routerControlFDs[36];
+	int hostControlFDs[36];
 
 	for(int i = 0; i < numConfig; i++)
 	{
@@ -233,5 +243,108 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	int routerIndex;
+	int routerInterfaceIndex;
+	int switchIndex;
+	int switchInterfaceIndex;
+	int hostIndex;
+
+	// go through each switch and make all the sockpairs
+
+	// for each router
+	for(routerIndex = 0; routerIndex < numRouters; routerIndex++)
+	{
+		routerInterfaceIndex = 0;
+
+		// for each router interface (switch)
+		while(routers[routerIndex].netIPs[routerInterfaceIndex] != 0)
+		{
+			switchIndex = 0;
+
+			while(switches[switchIndex].netNumber != routers[routerIndex].netIPs[routerInterfaceIndex])
+				switchIndex++;
+
+			switchInterfaceIndex = 0;
+
+			// for each switch interface (host)
+			while(switches[switchIndex].knownMACs[switchInterfaceIndex] != 0)
+			{
+				// if that interface hasn't been configured
+				if(switches[switchIndex].interfaces[switchInterfaceIndex] == 0)
+				{
+					hostIndex = 0;
+
+					while(hosts[hostIndex].MAC != switches[switchIndex].knownMACs[switchInterfaceIndex])
+						hostIndex++;
+
+					int ihSockpair[2]; 				// interpreter-host sockpair
+					int shSockpair[2];				// switch-host sockpair
+
+					socketpair(AF_UNIX, SOCK_STREAM, 0, ihSockpair);
+					socketpair(AF_UNIX, SOCK_STREAM, 0, shSockpair);
+
+					hosts[hostIndex].interpreterFD = ihSockpair[1];
+					hosts[hostIndex].interface = shSockpair[1];
+
+					hostControlFDs[hostIndex] = ihSockpair[0];
+					switches[switchIndex].interfaces[switchInterfaceIndex] = shSockpair[0];
+				}
+
+				switchInterfaceIndex++;
+			}
+
+			int srSockpair[2];				// switch-router sockpair
+
+			socketpair(AF_UNIX, SOCK_STREAM, 0, srSockpair);
+
+			switchInterfaceIndex
+
+			switches[switchIndex].;
+
+			routerInterfaceIndex++;
+		}
+	}
+
 	return 0;
+}
+/* forking a host
+HostInfo *tempHostInfo = malloc(sizeof(HostInfo));
+
+				memcpy(tempHostInfo, &hosts[hostIndex], sizeof(HostInfo));
+
+				int forkRC = fork();
+
+				if(forkRC == 0)
+				{
+					close(ihSockpair[0]);
+					close(shSockpair[0]);
+					FreeOperationsMemory(operations, currMaxOperations);
+
+					ActAsHost(tempHostInfo);
+
+					close(ihSockpair[1]);
+					close(shSockpair[1]);
+					free(tempHostInfo);
+					exit(0);
+				}
+				else
+				{
+					close(ihSockpair[1]);
+					close(shSockpair[1]);
+					free(tempHostInfo);
+				}
+*/
+void FreeOperationsMemory(char ***operations, int currMaxOperations)
+{
+	for(int i = 0; i < OPERATIONS_START_ELEMENTS; i++)
+	{
+		for(int j = 0; j < MAX_LINE_TOKENS; j++)
+		{
+			free(operations[i][j]);
+		}
+
+		free(operations[i]);
+	}
+
+	free(operations);
 }
