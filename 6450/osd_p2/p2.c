@@ -43,7 +43,7 @@ typedef struct {
 unsigned char MAC;
 unsigned char netIP;
 unsigned char hostIP;
-int inferface;
+int interface;
 int interpreterFD;
 
 } HostInfo;
@@ -217,7 +217,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	// add switch known macs
+	// add switch known macs and set up sockpairs
 	for(int i = 0; i < numSwitches; i++)
 	{
 		int knownMACs = 0;
@@ -228,6 +228,24 @@ int main(int argc, char *argv[])
 				if(routers[j].netIPs[k] == switches[i].netNumber)
 				{
 					switches[i].knownMACs[knownMACs] = routers[j].MACs[k];
+
+					int srSockpair[2];			// switch-router socketpair
+
+					socketpair(AF_UNIX, SOCK_STREAM, 0, srSockpair);
+
+					switches[i].interfaces[knownMACs] = srSockpair[0];
+					routers[j].interfaces[k] = srSockpair[1];
+
+					if(routers[j].interpreterFD == 0)
+					{
+						int irSockpair[2];			// interpreter-router socketpair
+
+						socketpair(AF_UNIX, SOCK_STREAM, 0, irSockpair);
+
+						routerControlFDs[j] = irSockpair[0];
+						routers[j].interpreterFD = irSockpair[1];
+					}
+
 					knownMACs++;
 				}
 			}
@@ -238,70 +256,21 @@ int main(int argc, char *argv[])
 			if(hosts[j].netIP == switches[i].netNumber)
 			{
 				switches[i].knownMACs[knownMACs] = hosts[j].MAC;
+
+				int shSockpair[2];			// switch-host socketpair
+				int ihSockpair[2];			// interpreter-host socketpair
+
+				socketpair(AF_UNIX, SOCK_STREAM, 0, shSockpair);
+				socketpair(AF_UNIX, SOCK_STREAM, 0, ihSockpair);
+
+				switches[i].interfaces[knownMACs] = shSockpair[0];
+				hosts[j].interface = shSockpair[1];
+
+				hostControlFDs[j] = ihSockpair[0];
+				hosts[j].interpreterFD = ihSockpair[1];
+
 				knownMACs++;
 			}
-		}
-	}
-
-	int routerIndex;
-	int routerInterfaceIndex;
-	int switchIndex;
-	int switchInterfaceIndex;
-	int hostIndex;
-
-	// go through each switch and make all the sockpairs
-
-	// for each router
-	for(routerIndex = 0; routerIndex < numRouters; routerIndex++)
-	{
-		routerInterfaceIndex = 0;
-
-		// for each router interface (switch)
-		while(routers[routerIndex].netIPs[routerInterfaceIndex] != 0)
-		{
-			switchIndex = 0;
-
-			while(switches[switchIndex].netNumber != routers[routerIndex].netIPs[routerInterfaceIndex])
-				switchIndex++;
-
-			switchInterfaceIndex = 0;
-
-			// for each switch interface (host)
-			while(switches[switchIndex].knownMACs[switchInterfaceIndex] != 0)
-			{
-				// if that interface hasn't been configured
-				if(switches[switchIndex].interfaces[switchInterfaceIndex] == 0)
-				{
-					hostIndex = 0;
-
-					while(hosts[hostIndex].MAC != switches[switchIndex].knownMACs[switchInterfaceIndex])
-						hostIndex++;
-
-					int ihSockpair[2]; 				// interpreter-host sockpair
-					int shSockpair[2];				// switch-host sockpair
-
-					socketpair(AF_UNIX, SOCK_STREAM, 0, ihSockpair);
-					socketpair(AF_UNIX, SOCK_STREAM, 0, shSockpair);
-
-					hosts[hostIndex].interpreterFD = ihSockpair[1];
-					hosts[hostIndex].interface = shSockpair[1];
-
-					hostControlFDs[hostIndex] = ihSockpair[0];
-					switches[switchIndex].interfaces[switchInterfaceIndex] = shSockpair[0];
-				}
-
-				switchInterfaceIndex++;
-			}
-
-			int srSockpair[2];				// switch-router sockpair
-
-			socketpair(AF_UNIX, SOCK_STREAM, 0, srSockpair);
-
-			switchInterfaceIndex
-
-			switches[switchIndex].;
-
-			routerInterfaceIndex++;
 		}
 	}
 
