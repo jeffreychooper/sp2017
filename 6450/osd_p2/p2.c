@@ -274,6 +274,23 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	// forks...
+	for(int i = 0; i < numSwitches; i++)
+	{
+
+	}
+
+	for(int i = 0; i < numRouters; i++)
+	{
+
+	}
+
+
+	for(int i = 0; i < numHosts; i++)
+	{
+
+	}
+
 	return 0;
 }
 /* forking a host
