@@ -460,7 +460,16 @@ int main(int argc, char *argv[])
 		}
 		else if(strcmp(operations[operationsIndex][0], "pause") == 0)
 		{
-
+			if(strcmp(operations[operationsIndex][1], "tty") == 0)
+			{
+				fputs("press return to continue", stdout);
+				getchar();
+			}
+			else
+			{
+				int timeToWait = atoi(operations[operationsIndex][1]);
+				sleep(timeToWait);
+			}
 		}
 
 		operationsIndex++;
