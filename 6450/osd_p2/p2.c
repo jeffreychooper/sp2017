@@ -152,12 +152,22 @@ int main(int argc, char *argv[])
 			{
 				strcpy(operations[lineCount][0], p);
 
-				for(tokenIndex = 1; tokenIndex < MAX_LINE_TOKENS; tokenIndex++)
+				if(strcmp(operations[lineCount][0], "prt") == 0)
 				{
-					if(p = strtok(NULL, " \t"))
-						strcpy(operations[lineCount][tokenIndex], p);
+					if(p = strtok(NULL, "\n"))
+						strcpy(operations[lineCount][1], p);
 					else
 						break;
+				}
+				else
+				{
+					for(tokenIndex = 1; tokenIndex < MAX_LINE_TOKENS; tokenIndex++)
+					{
+						if(p = strtok(NULL, " \t"))
+							strcpy(operations[lineCount][tokenIndex], p);
+						else
+							break;
+					}
 				}
 
 				numOperations++;
@@ -440,6 +450,21 @@ int main(int argc, char *argv[])
 	}
 
 	// do the operations...
+	int operationsIndex = 0;
+
+	while(operationsIndex < currMaxOperations && operations[operationsIndex][0][0] != 0)
+	{
+		if(strcmp(operations[operationsIndex][0], "prt") == 0)
+		{
+			printf("%s\n", operations[operationsIndex][1]);
+		}
+		else if(strcmp(operations[operationsIndex][0], "pause") == 0)
+		{
+
+		}
+
+		operationsIndex++;
+	}
 
 	return 0;
 }
