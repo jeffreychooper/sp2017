@@ -217,6 +217,8 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	int fdsOpen = 3;	// 0, 1, 2 are stdin/out/err
+
 	// add switch known macs and set up sockpairs
 	for(int i = 0; i < numSwitches; i++)
 	{
@@ -232,6 +234,7 @@ int main(int argc, char *argv[])
 					int srSockpair[2];			// switch-router socketpair
 
 					socketpair(AF_UNIX, SOCK_STREAM, 0, srSockpair);
+					fdsOpen += 2;
 
 					switches[i].interfaces[knownMACs] = srSockpair[0];
 					routers[j].interfaces[k] = srSockpair[1];
@@ -241,6 +244,7 @@ int main(int argc, char *argv[])
 						int irSockpair[2];			// interpreter-router socketpair
 
 						socketpair(AF_UNIX, SOCK_STREAM, 0, irSockpair);
+						fdsOpen += 2;
 
 						routerControlFDs[j] = irSockpair[0];
 						routers[j].interpreterFD = irSockpair[1];
@@ -262,6 +266,7 @@ int main(int argc, char *argv[])
 
 				socketpair(AF_UNIX, SOCK_STREAM, 0, shSockpair);
 				socketpair(AF_UNIX, SOCK_STREAM, 0, ihSockpair);
+				fdsOpen += 2;
 
 				switches[i].interfaces[knownMACs] = shSockpair[0];
 				hosts[j].interface = shSockpair[1];
@@ -274,15 +279,117 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	// forks...
 	for(int i = 0; i < numSwitches; i++)
 	{
+		SwitchInfo *tempSwitchInfo = malloc(sizeof(SwitchInfo));
+		memcpy(tempSwitchInfo, &switches[i], sizeof(SwitchInfo));
 
+		int forkRC = fork();
+
+		if(forkRC == 0)
+		{
+			for(int i = 3; i < fdsOpen; i++)
+			{
+				int isMine = 0;
+				int interfaceIndex = 0;
+
+				while(interfaceIndex < 6 && tempSwitchInfo->interfaces[interfaceIndex] != 0)
+				{
+					if(tempSwitchInfo->interfaces[interfaceIndex] == i)
+						isMine = 1;
+
+					interfaceIndex++;
+				}
+
+				if(!isMine)
+					close(i);
+			}
+			
+			FreeOperationsMemory(operations, currMaxOperations);
+
+			ActAsSwitch(tempSwitchInfo);
+
+			int interfaceIndex = 0;
+
+			while(interfaceIndex < 6 && tempSwitchInfo->interfaces[interfaceIndex] != 0)
+			{
+				close(tempSwitchInfo->interfaces[interfaceIndex]);
+				interfaceIndex++;
+			}
+
+			free(tempSwitchInfo);
+			
+			exit(0);
+		}
+		else
+		{
+			int interfaceIndex = 0;
+
+			while(interfaceIndex < 6 && switches[i].interfaces[interfaceIndex] != 0)
+			{
+				close(switches[i].interfaces[interfaceIndex]);
+				interfaceIndex++;
+			}
+			
+			free(tempSwitchInfo);
+		}
 	}
 
 	for(int i = 0; i < numRouters; i++)
 	{
+		RouterInfo *tempRouterInfo = malloc(sizeof(RouterInfo));
+		memcpy(tempRouterInfo, &routers[i], sizeof(RouterInfo));
 
+		int forkRC = fork();
+
+		if(forkRC == 0)
+		{
+			for(int i = 3; i < fdsOpen; i++)
+			{
+				int isMine = 0;
+				int interfaceIndex = 0;
+
+				while(interfaceIndex < 6 && tempRouterInfo->interfaces[interfaceIndex] != 0)
+				{
+					if(tempRouterInfo->interfaces[interfaceIndex] == i)
+						isMine = 1;
+
+						interfaceIndex++;
+				}
+
+				if(!isMine)
+					close(i);
+			}
+
+			FreeOperationsMemory(operations, currMaxOperations);
+			// can I free more stuff...?
+
+			ActAsRouter(tempRouterInfo);
+
+			int interfaceIndex = 0;
+
+			while(interfaceIndex < 6 && tempRouterInfo->interfaces[interfaceIndex] != 0)
+			{
+				close(tempRouterInfo->interfaces[interfaceIndex]);
+				interfaceIndex++;
+			}
+
+			free(tempRouterInfo);
+
+			exit(0);
+		}
+		else
+		{
+			int interfaceIndex = 0;
+
+			while(interfaceIndex < 6 && routers[i].interfaces[interfaceIndex] != 0)
+			{
+				close(routers[i].interfaces[interfaceIndex]);
+				interfaceIndex++;
+			}
+
+			free(tempRouterInfo);
+		}
 	}
 
 
@@ -293,33 +400,7 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
-/* forking a host
-HostInfo *tempHostInfo = malloc(sizeof(HostInfo));
 
-				memcpy(tempHostInfo, &hosts[hostIndex], sizeof(HostInfo));
-
-				int forkRC = fork();
-
-				if(forkRC == 0)
-				{
-					close(ihSockpair[0]);
-					close(shSockpair[0]);
-					FreeOperationsMemory(operations, currMaxOperations);
-
-					ActAsHost(tempHostInfo);
-
-					close(ihSockpair[1]);
-					close(shSockpair[1]);
-					free(tempHostInfo);
-					exit(0);
-				}
-				else
-				{
-					close(ihSockpair[1]);
-					close(shSockpair[1]);
-					free(tempHostInfo);
-				}
-*/
 void FreeOperationsMemory(char ***operations, int currMaxOperations)
 {
 	for(int i = 0; i < OPERATIONS_START_ELEMENTS; i++)
