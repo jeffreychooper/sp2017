@@ -266,7 +266,7 @@ int main(int argc, char *argv[])
 
 				socketpair(AF_UNIX, SOCK_STREAM, 0, shSockpair);
 				socketpair(AF_UNIX, SOCK_STREAM, 0, ihSockpair);
-				fdsOpen += 2;
+				fdsOpen += 4;
 
 				switches[i].interfaces[knownMACs] = shSockpair[0];
 				hosts[j].interface = shSockpair[1];
@@ -296,7 +296,10 @@ int main(int argc, char *argv[])
 				while(interfaceIndex < 6 && tempSwitchInfo->interfaces[interfaceIndex] != 0)
 				{
 					if(tempSwitchInfo->interfaces[interfaceIndex] == i)
+					{
 						isMine = 1;
+						break;
+					}
 
 					interfaceIndex++;
 				}
@@ -306,6 +309,7 @@ int main(int argc, char *argv[])
 			}
 			
 			FreeOperationsMemory(operations, currMaxOperations);
+			// Can I free more stuff
 
 			ActAsSwitch(tempSwitchInfo);
 
@@ -351,10 +355,13 @@ int main(int argc, char *argv[])
 
 				while(interfaceIndex < 6 && tempRouterInfo->interfaces[interfaceIndex] != 0)
 				{
-					if(tempRouterInfo->interfaces[interfaceIndex] == i)
+					if(tempRouterInfo->interfaces[interfaceIndex] == i || tempRouterInfo->interpreterFD == i)
+					{
 						isMine = 1;
+						break;
+					}
 
-						interfaceIndex++;
+					interfaceIndex++;
 				}
 
 				if(!isMine)
@@ -362,7 +369,7 @@ int main(int argc, char *argv[])
 			}
 
 			FreeOperationsMemory(operations, currMaxOperations);
-			// can I free more stuff...?
+			// TODO: can I free more stuff...?
 
 			ActAsRouter(tempRouterInfo);
 
@@ -373,6 +380,8 @@ int main(int argc, char *argv[])
 				close(tempRouterInfo->interfaces[interfaceIndex]);
 				interfaceIndex++;
 			}
+
+			close(tempRouterInfo->interpreterFD);
 
 			free(tempRouterInfo);
 
@@ -388,19 +397,52 @@ int main(int argc, char *argv[])
 				interfaceIndex++;
 			}
 
+			close(routers[i].interpreterFD);
+
 			free(tempRouterInfo);
 		}
 	}
 
-
 	for(int i = 0; i < numHosts; i++)
 	{
+		HostInfo *tempHostInfo = malloc(sizeof(HostInfo));
+		memcpy(tempHostInfo, &hosts[i], sizeof(HostInfo));
 
+		int forkRC = fork();
+
+		if(forkRC == 0)
+		{
+			for(int i = 3; i < fdsOpen; i++)
+			{
+				if(i != tempHostInfo->interface && i != tempHostInfo->interpreterFD)
+					close(i);
+			}
+
+			FreeOperationsMemory(operations, currMaxOperations);
+			// TODO: can I free more stuff...?
+
+			ActAsHost(tempHostInfo);
+
+			close(tempHostInfo->interface);
+			close(tempHostInfo->interpreterFD);
+
+			free(tempHostInfo);
+
+			exit(0);
+		}
+		else
+		{
+			close(hosts[i].interface);
+			close(hosts[i].interpreterFD);
+
+			free(tempHostInfo);
+		}
 	}
+
+	// do the operations...
 
 	return 0;
 }
-
 void FreeOperationsMemory(char ***operations, int currMaxOperations)
 {
 	for(int i = 0; i < OPERATIONS_START_ELEMENTS; i++)
@@ -414,4 +456,19 @@ void FreeOperationsMemory(char ***operations, int currMaxOperations)
 	}
 
 	free(operations);
+}
+
+void ActAsSwitch(SwitchInfo *switchInfo)
+{
+
+}
+
+void ActAsRouter(RouterInfo *routerInfo)
+{
+
+}
+
+void ActAsHost(HostInfo *hostInfo)
+{
+
 }
