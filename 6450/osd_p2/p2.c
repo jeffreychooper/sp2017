@@ -471,6 +471,10 @@ int main(int argc, char *argv[])
 				sleep(timeToWait);
 			}
 		}
+		else if(strcmp(operations[operationsIndex][0], "macsend") == 0)
+		{
+
+		}
 
 		operationsIndex++;
 	}
