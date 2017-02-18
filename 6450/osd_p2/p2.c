@@ -14,6 +14,7 @@
 #define MAX_LINE_TOKENS 14
 #define MAX_TOKEN_LENGTH 64
 #define EXTRA_OPERATIONS 10
+#define MAX_ETHERNET_PACKET_SIZE 104
 
 enum NodeType { SWITCH, ROUTER, HOST };
 
@@ -52,6 +53,7 @@ void FreeOperationsMemory(char ***operations, int currMaxOperations);
 void ActAsSwitch(SwitchInfo *switchInfo);
 void ActAsRouter(RouterInfo *routerInfo);
 void ActAsHost(HostInfo *hostInfo);
+unsigned char *CreateEthernetPacket(unsigned char destMAC, unsigned char srcMAC, unsigned char type, unsigned char length, char *payload);
 
 int main(int argc, char *argv[])
 {
@@ -473,7 +475,15 @@ int main(int argc, char *argv[])
 		}
 		else if(strcmp(operations[operationsIndex][0], "macsend") == 0)
 		{
+			// 1 is message, 2 is sender, 3 is receiver
+			// TODO: free this memory!
+			unsigned char *packetToSend = CreateEthernetPacket((unsigned char)atoi(operations[operationsIndex][3]),
+															   (unsigned char)atoi(operations[operationsIndex][2]),
+															   (unsigned char)0,
+															   (unsigned char)(4 + strlen(operations[operationsIndex][1])),
+															   operations[operationsIndex][1]);
 
+			// TODO: tell the host/router to send the message
 		}
 
 		operationsIndex++;
@@ -509,4 +519,19 @@ void ActAsRouter(RouterInfo *routerInfo)
 void ActAsHost(HostInfo *hostInfo)
 {
 
+}
+
+// TODO: free the memory returned by this
+unsigned char *CreateEthernetPacket(unsigned char destMAC, unsigned char srcMAC, unsigned char type, unsigned char length, char *payload)
+{
+	unsigned char *returnPacket = calloc(MAX_ETHERNET_PACKET_SIZE, sizeof(unsigned char));
+
+	returnPacket[0] = destMAC;
+	returnPacket[1] = srcMAC;
+	returnPacket[2] = type;
+	returnPacket[3] = length;
+
+	strncpy(&returnPacket[4], payload, strlen(payload));
+
+	return returnPacket;
 }
