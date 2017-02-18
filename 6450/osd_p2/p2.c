@@ -490,15 +490,92 @@ int main(int argc, char *argv[])
 		}
 		else if(strcmp(operations[operationsIndex][0], "macsend") == 0)
 		{
-			// 1 is message, 2 is sender, 3 is receiver
-			// TODO: free this memory!
-			unsigned char *packetToSend = CreateEthernetPacket((unsigned char)atoi(operations[operationsIndex][3]),
-															   (unsigned char)atoi(operations[operationsIndex][2]),
-															   (unsigned char)0,
-															   (unsigned char)(4 + strlen(operations[operationsIndex][1])),
-															   operations[operationsIndex][1]);
+			unsigned char senderMAC = (unsigned char)operations[operationsIndex][2];
+			int sent = 0;
+			int index = 0;
 
-			// TODO: tell the host/router to send the message
+			while(index < numRouters)
+			{
+				int macIndex = 0;
+
+				while(macIndex < 6 && routers[index].MACs[macIndex])
+				{
+					if(routers[index].MACs[macIndex] == senderMAC)
+					{
+						int routerInterface = routerControlFDs[index];
+						unsigned char charBuffer[1];
+						unsigned char buffer[100];
+
+						// 2 means macsend
+						charBuffer[0] = 2;
+						write(routerInterface, (void *)&charBuffer, 1);
+
+						// receiver
+						charBuffer[0] = (unsigned char)atoi(operations[operationIndex][3]);
+						write(routerInterface, (void *)&charBuffer, 1);
+
+						// sender
+						charBuffer[0] = (unsigned char)atoi(operations[operationIndex][2]);
+						write(routerInterface, (void *)&charBuffer, 1);
+
+						// message
+						int messageLength = strlen(operations[operationsIndex][1]);
+						strncpy(&buffer, operations[opertionsIndex][1], messageLength);
+
+						int bytesWritten = write(routerInterface, (void *)&charBuffer, messageLength);
+
+						while(bytesWritten < messageLength)
+							bytesWritten += write(routerInterface, (void *)&charBuffer + bytesWritten, messageLength - bytesWritten);
+
+						sent = 1;
+						break;
+					}
+				}
+
+				if(sent)
+					break;
+
+				index++;
+			}
+
+			if(!sent)
+			{
+				index = 0;
+
+				while(index < numHosts)
+				{
+					if(hosts[index].MAC == senderMAC)
+					{
+						int hostInterface = hostControlFDs[index];
+						unsigned char charBuffer[1];
+						unsigned char buffer[100];
+
+						// 2 means macsend
+						charBuffer[0] = 2;
+						write(hostInterface, (void *)&charBuffer, 1);
+
+						// receiver
+						charBuffer[0] = (unsigned char)atoi(operations[operationIndex][3]);
+						write(hostInterface, (void *)&charBuffer, 1);
+
+						// sender
+						charBuffer[0] = (unsigned char)atoi(operations[operationIndex][2]);
+						write(hostInterface, (void *)&charBuffer, 1);
+
+						// message
+						int messageLength = strlen(operations[operationsIndex][1]);
+						strncpy(&buffer, operations[opertionsIndex][1], messageLength);
+
+						int bytesWritten = write(hostInterface, (void *)&charBuffer, messageLength);
+
+						while(bytesWritten < messageLength)
+							bytesWritten += write(hostInterface, (void *)&charBuffer + bytesWritten, messageLength - bytesWritten);
+
+						sent = 1;
+						break;
+					}
+				}
+			}
 		}
 
 		operationsIndex++;
@@ -635,6 +712,8 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 void ActAsRouter(RouterInfo *routerInfo)
 {
 
+	// (2) for macsend, (1) for done
+	// 1 receiver, 1 sender, 100, message
 }
 
 void ActAsHost(HostInfo *hostInfo)
