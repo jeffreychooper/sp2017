@@ -532,6 +532,8 @@ int main(int argc, char *argv[])
 						sent = 1;
 						break;
 					}
+
+					macIndex++;
 				}
 
 				if(sent)
@@ -714,13 +716,115 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 void ActAsRouter(RouterInfo *routerInfo)
 {
 
-	// (2) for macsend, (1) for done
-	// 1 receiver, 1 sender, 100, message
+	int done = 0;
+	int rc;
+	int bytesRead;
+	int setSize = 0;
+	fd_set readFDs;
+	unsigned char buffer[MAX_ETHERNET_PACKET_SIZE];
+
+	while(!done)
+	{
+		FD_ZERO(&readFDs);
+
+		int interfaceIndex = 0;
+		
+		while(interfaceIndex < 6 && routerInfo->interfaces[interfaceIndex])
+		{
+			FD_SET(routerInfo->interfaces[interfaceIndex], &readFDs);
+
+			if(setSize < routerInfo->interfaces[interfaceIndex])
+				setSize = routerInfo->interfaces[interfaceIndex];
+		}
+
+		FD_SET(routerInfo->interpreterFD, &readFDs);
+
+		if(setSize < routerInfo->interpreterFD)
+			setSize = routerInfo->interpreterFD;
+
+		setSize++;
+
+		rc = select(setSize, &readFDs, NULL, NULL, NULL);
+
+		if(rc == -1 && errno == EINTR)
+			continue;
+
+		interfaceIndex = 0;
+
+		while(interfaceIndex < 6 && routerInfo->interfaces[interfaceIndex])
+		{
+			if(FD_ISSET(routerInfo->interfaces[interfaceIndex], &readFDs))
+			{
+				bytesRead = read(routerInfo->interfaces[interfaceIndex], (void *)&buffer, MAX_ETHERNET_PACKET_SIZE);
+
+				if(!bytesRead)
+					break;
+
+				while(bytesRead < MAX_ETHERNET_PACKET_SIZE)
+					bytesRead += read(routerInfo->interfaces[interfaceIndex], (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
+
+				// TODO: print that I received a message
+			}
+		}
+
+		if(FD_ISSET(routerInfo->interpreterFD, &readFDs))
+		{
+			char charBuffer[1];
+
+			read(routerInfo->interpreterFD, (void *)&buffer, 1);
+
+			// (2) for macsend, (1) for done
+			if(buffer[0] == 1)
+			{
+				done = 1;
+			}
+			else if(buffer[0] == 2)
+			{
+				char receiver[1];
+				char sender[1];
+				char message[100];
+
+				read(routerInfo->interpreterFD, (void *)&receiver, 1);
+				read(routerInfo->interpreterFD, (void *)&sender, 1);
+
+				int bytesRead = read(routerInfo->interpreterFD, (void *)&message, 100);
+
+				while(bytesRead < 100)
+					bytesRead += read(routerInfo->interpreterFD, (void *)&message + bytesRead, 100 - bytesRead);
+
+				// send the macsend
+				int interfaceIndex = 0;
+				int sendInterface;
+
+				while(interfaceIndex < 6 && routerInfo->interfaces[interfaceIndex])
+				{
+					if(routerInfo->MACs[interfaceIndex] == (int)sender[0])
+					{
+						sendInterface = routerInfo->interfaces[interfaceIndex];
+						break;
+					}
+
+					interfaceIndex++;
+				}
+
+				// TODO: free this
+				char *packetToSend = CreateEthernetPacket(receiver[0],
+														  sender[0],
+														  (unsigned char)0,
+														  4 + strlen(message),
+														  message);
+
+				int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
+
+				while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
+					bytesWritten += write(sendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+			}
+		}
+	}
 }
 
 void ActAsHost(HostInfo *hostInfo)
 {
-
 
 }
 
