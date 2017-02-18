@@ -1,4 +1,6 @@
+// TODO: make changes so my output can print device names
 // SOCKPAIR SIDES
+// 0 interpreter-switch 1
 // 0 interpreter-host/router 1
 // 0 switch-router/host 1
 #include <stdio.h>
@@ -7,6 +9,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <errno.h>
 
 #define MAX_LINE_LENGTH 896
 #define CONFIG_MAX_SIZE 42
@@ -24,6 +27,7 @@ typedef struct {
 unsigned char netNumber;
 unsigned char knownMACs[6];
 int interfaces[6];
+int interpreterInterface;
 
 } SwitchInfo;
 
@@ -54,6 +58,7 @@ void ActAsSwitch(SwitchInfo *switchInfo);
 void ActAsRouter(RouterInfo *routerInfo);
 void ActAsHost(HostInfo *hostInfo);
 unsigned char *CreateEthernetPacket(unsigned char destMAC, unsigned char srcMAC, unsigned char type, unsigned char length, char *payload);
+int GetEthernetPacketDestMAC(char *packet);
 
 int main(int argc, char *argv[])
 {
@@ -234,6 +239,14 @@ int main(int argc, char *argv[])
 	// add switch known macs and set up sockpairs
 	for(int i = 0; i < numSwitches; i++)
 	{
+		int isSockpair[2];		// interpreter-switch socketpair
+
+		socketpair(AF_UNIX, SOCK_STREAM, 0, isSockpair);
+		fdsOpen += 2;
+
+		switchControlFDs[i] = irSockpair[0];
+		switches[i].interpreterFD = irSockpair[1];
+
 		int knownMACs = 0;
 		for(int j = 0; j < numRouters; j++)
 		{
@@ -346,6 +359,8 @@ int main(int argc, char *argv[])
 				close(switches[i].interfaces[interfaceIndex]);
 				interfaceIndex++;
 			}
+
+			close(switches[i].interpreterInterface);
 			
 			free(tempSwitchInfo);
 		}
@@ -489,6 +504,30 @@ int main(int argc, char *argv[])
 		operationsIndex++;
 	}
 
+	char messageFlagBuffer[1];
+	messageFlagBuffer[0] = 1;
+
+	for(int i = 0; i < numSwitches; i++)
+	{
+		write(switchControlFDs[i], (void *)&messageFlagBuffer, 1);
+	}
+
+	for(int i = 0; i < numRouters; i++)
+	{
+		write(routerControlFDs[i], (void *)&messageFlagBuffer, 1);
+	}
+
+	for(int i = 0; i < numHosts; i++)
+	{
+		write(hostControlFDs[i], (void *)&messageFlagBuffer, 1);
+	}
+
+	int waitStatus;
+
+	while(waitpid(-1, &waitStatus, NULL))
+		if(errno == ECHILD)
+			break;
+
 	return 0;
 }
 void FreeOperationsMemory(char ***operations, int currMaxOperations)
@@ -508,7 +547,89 @@ void FreeOperationsMemory(char ***operations, int currMaxOperations)
 
 void ActAsSwitch(SwitchInfo *switchInfo)
 {
+	int done = 0;
+	int rc;
+	int bytesRead;
+	int setSize = 0;
+	fd_set readFDs;
+	unsigned char buffer[MAX_ETHERNET_PACKET_SIZE];
 
+	while(!done)
+	{
+		FD_ZERO(&readFDs);
+		
+		int interfaceIndex = 0;
+
+		while(interfaceIndex < 6 && switchInfo->interfaces[interfaceIndex])
+		{
+			FD_SET(switchInfo->interfaces[interfaceIndex], &readFDs);
+
+			if(setSize < switchInfo->interfaces[interfaceIndex])
+				setSize = switchInfo->interfaces[interfaceIndex];
+		}
+
+		FD_SET(switchInfo->interpreterInterface, &readFDs);
+
+		if(setSize < switchInfo->interpreterInterface)
+			setSize = switchInfo->interpreterInterface;
+
+		setSize++;
+
+		rc = select(setSize, &readFDs, NULL, NULL, NULL);
+
+		if(rc == -1 && errno == EINTR)
+			continue;
+
+		interfaceIndex = 0;
+
+		while(interfaceIndex < 6 && switchInfo->interfaces[interfaceIndex]);
+		{
+			if(FD_ISSET(switchInfo->interfaces[interfaceIndex], &readFDs))
+			{
+				bytesRead = read(switchInfo->interfaces[interfaceIndex], (void *)&buffer, MAX_ETHERNET_PACKET_SIZE);
+
+				if(!bytesRead)
+					break;
+
+				while(bytesRead < MAX_ETHERNET_PACKET_SIZE)
+					bytesRead += read(switchInfo->interfaces[interfaceIndex], (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
+
+				int destInterfaceIndex = 0;
+				int foundDest = 0;
+
+				while(destInterfaceIndex < 6 && switchInfo->interfaces[destInterfaceIndex])
+				{
+					if(switchInfo->interfaces[destInterfaceIndex] == GetEthernetPacketDestMAC(buffer))
+					{
+						foundDest = 1;
+
+						int bytesWritten = 0;
+
+						bytesWritten = write(switchInfo->interfaces[destInterfaceIndex], (void *)&buffer, MAX_ETHERNET_PACKET_SIZE);
+
+						while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
+							bytesWritten += write(switchInfo->interfaces[destInterfaceIndex], (void *)&buffer + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+						break;
+					}
+				}
+
+				if(!foundDest)
+					printf("Switch discarded packet for unknown MAC %d", GetEthernetPacketDestMAC(buffer));
+			}
+		}
+
+		if(FD_ISSET(switchInfo->interpreterInterface, &readFDs))
+		{
+			// interpreter will only ever send a single byte to a switch... 1 means we're done
+			char buffer[1]
+
+			read(switchInfo->interpreterInterface, (void *)&buffer, 1);
+
+			if(buffer[0] = 1)
+				done = 1;
+		}
+	}
 }
 
 void ActAsRouter(RouterInfo *routerInfo)
@@ -518,6 +639,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 
 void ActAsHost(HostInfo *hostInfo)
 {
+
 
 }
 
@@ -534,4 +656,11 @@ unsigned char *CreateEthernetPacket(unsigned char destMAC, unsigned char srcMAC,
 	strncpy(&returnPacket[4], payload, strlen(payload));
 
 	return returnPacket;
+}
+
+int GetEthernetPacketDestMAC(char *packet)
+{
+	int returnValue = packet[0];
+
+	return returnValue;
 }
