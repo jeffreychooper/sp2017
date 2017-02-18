@@ -10,6 +10,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/wait.h>
 
 #define MAX_LINE_LENGTH 896
 #define CONFIG_MAX_SIZE 42
@@ -27,7 +28,7 @@ typedef struct {
 unsigned char netNumber;
 unsigned char knownMACs[6];
 int interfaces[6];
-int interpreterInterface;
+int interpreterFD;
 
 } SwitchInfo;
 
@@ -193,6 +194,7 @@ int main(int argc, char *argv[])
 	int numRouters = 0;
 	int numHosts = 0;
 	// TODO: close all of these
+	int switchControlFDs[6];
 	int routerControlFDs[36];
 	int hostControlFDs[36];
 
@@ -244,8 +246,8 @@ int main(int argc, char *argv[])
 		socketpair(AF_UNIX, SOCK_STREAM, 0, isSockpair);
 		fdsOpen += 2;
 
-		switchControlFDs[i] = irSockpair[0];
-		switches[i].interpreterFD = irSockpair[1];
+		switchControlFDs[i] = isSockpair[0];
+		switches[i].interpreterFD = isSockpair[1];
 
 		int knownMACs = 0;
 		for(int j = 0; j < numRouters; j++)
@@ -360,7 +362,7 @@ int main(int argc, char *argv[])
 				interfaceIndex++;
 			}
 
-			close(switches[i].interpreterInterface);
+			close(switches[i].interpreterFD);
 			
 			free(tempSwitchInfo);
 		}
@@ -490,7 +492,7 @@ int main(int argc, char *argv[])
 		}
 		else if(strcmp(operations[operationsIndex][0], "macsend") == 0)
 		{
-			unsigned char senderMAC = (unsigned char)operations[operationsIndex][2];
+			unsigned char senderMAC = (unsigned char)atoi(operations[operationsIndex][2]);
 			int sent = 0;
 			int index = 0;
 
@@ -503,24 +505,24 @@ int main(int argc, char *argv[])
 					if(routers[index].MACs[macIndex] == senderMAC)
 					{
 						int routerInterface = routerControlFDs[index];
-						unsigned char charBuffer[1];
-						unsigned char buffer[100];
+						char charBuffer[1];
+						char buffer[100];
 
 						// 2 means macsend
 						charBuffer[0] = 2;
 						write(routerInterface, (void *)&charBuffer, 1);
 
 						// receiver
-						charBuffer[0] = (unsigned char)atoi(operations[operationIndex][3]);
+						charBuffer[0] = (unsigned char)atoi(operations[operationsIndex][3]);
 						write(routerInterface, (void *)&charBuffer, 1);
 
 						// sender
-						charBuffer[0] = (unsigned char)atoi(operations[operationIndex][2]);
+						charBuffer[0] = (unsigned char)atoi(operations[operationsIndex][2]);
 						write(routerInterface, (void *)&charBuffer, 1);
 
 						// message
 						int messageLength = strlen(operations[operationsIndex][1]);
-						strncpy(&buffer, operations[opertionsIndex][1], messageLength);
+						strncpy(buffer, operations[operationsIndex][1], messageLength);
 
 						int bytesWritten = write(routerInterface, (void *)&charBuffer, messageLength);
 
@@ -555,16 +557,16 @@ int main(int argc, char *argv[])
 						write(hostInterface, (void *)&charBuffer, 1);
 
 						// receiver
-						charBuffer[0] = (unsigned char)atoi(operations[operationIndex][3]);
+						charBuffer[0] = (unsigned char)atoi(operations[operationsIndex][3]);
 						write(hostInterface, (void *)&charBuffer, 1);
 
 						// sender
-						charBuffer[0] = (unsigned char)atoi(operations[operationIndex][2]);
+						charBuffer[0] = (unsigned char)atoi(operations[operationsIndex][2]);
 						write(hostInterface, (void *)&charBuffer, 1);
 
 						// message
 						int messageLength = strlen(operations[operationsIndex][1]);
-						strncpy(&buffer, operations[opertionsIndex][1], messageLength);
+						strncpy(buffer, operations[operationsIndex][1], messageLength);
 
 						int bytesWritten = write(hostInterface, (void *)&charBuffer, messageLength);
 
@@ -601,7 +603,7 @@ int main(int argc, char *argv[])
 
 	int waitStatus;
 
-	while(waitpid(-1, &waitStatus, NULL))
+	while(waitpid(-1, &waitStatus, 0))
 		if(errno == ECHILD)
 			break;
 
@@ -645,10 +647,10 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 				setSize = switchInfo->interfaces[interfaceIndex];
 		}
 
-		FD_SET(switchInfo->interpreterInterface, &readFDs);
+		FD_SET(switchInfo->interpreterFD, &readFDs);
 
-		if(setSize < switchInfo->interpreterInterface)
-			setSize = switchInfo->interpreterInterface;
+		if(setSize < switchInfo->interpreterFD)
+			setSize = switchInfo->interpreterFD;
 
 		setSize++;
 
@@ -696,12 +698,12 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 			}
 		}
 
-		if(FD_ISSET(switchInfo->interpreterInterface, &readFDs))
+		if(FD_ISSET(switchInfo->interpreterFD, &readFDs))
 		{
 			// interpreter will only ever send a single byte to a switch... 1 means we're done
-			char buffer[1]
+			char buffer[1];
 
-			read(switchInfo->interpreterInterface, (void *)&buffer, 1);
+			read(switchInfo->interpreterFD, (void *)&buffer, 1);
 
 			if(buffer[0] = 1)
 				done = 1;
