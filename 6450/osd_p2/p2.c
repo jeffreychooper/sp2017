@@ -482,7 +482,7 @@ int main(int argc, char *argv[])
 			if(strcmp(operations[operationsIndex][1], "tty") == 0)
 			{
 				fputs("press return to continue", stdout);
-				getchar();
+				//TODO: uncomment getchar();
 			}
 			else
 			{
@@ -506,7 +506,7 @@ int main(int argc, char *argv[])
 					{
 						int routerInterface = routerControlFDs[index];
 						char charBuffer[1];
-						char buffer[100];
+						char buffer[100] = { 0 };
 
 						// 2 means macsend
 						charBuffer[0] = 2;
@@ -524,10 +524,10 @@ int main(int argc, char *argv[])
 						int messageLength = strlen(operations[operationsIndex][1]);
 						strncpy(buffer, operations[operationsIndex][1], messageLength);
 
-						int bytesWritten = write(routerInterface, (void *)&charBuffer, messageLength);
+						int bytesWritten = write(routerInterface, (void *)&charBuffer, 100);
 
-						while(bytesWritten < messageLength)
-							bytesWritten += write(routerInterface, (void *)&charBuffer + bytesWritten, messageLength - bytesWritten);
+						while(bytesWritten < 100)
+							bytesWritten += write(routerInterface, (void *)&charBuffer + bytesWritten, 100 - bytesWritten);
 
 						sent = 1;
 						break;
@@ -570,10 +570,10 @@ int main(int argc, char *argv[])
 						int messageLength = strlen(operations[operationsIndex][1]);
 						strncpy(buffer, operations[operationsIndex][1], messageLength);
 
-						int bytesWritten = write(hostInterface, (void *)&charBuffer, messageLength);
+						int bytesWritten = write(hostInterface, (void *)&charBuffer, 100);
 
-						while(bytesWritten < messageLength)
-							bytesWritten += write(hostInterface, (void *)&charBuffer + bytesWritten, messageLength - bytesWritten);
+						while(bytesWritten < 100)
+							bytesWritten += write(hostInterface, (void *)&charBuffer + bytesWritten, 100 - bytesWritten);
 
 						sent = 1;
 						break;
@@ -590,7 +590,7 @@ int main(int argc, char *argv[])
 
 	for(int i = 0; i < numSwitches; i++)
 	{
-		write(switchControlFDs[i], (void *)&messageFlagBuffer, 1);
+		// write(switchControlFDs[i], (void *)&messageFlagBuffer, 1);
 	}
 
 	for(int i = 0; i < numRouters; i++)
@@ -647,6 +647,8 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 
 			if(setSize < switchInfo->interfaces[interfaceIndex])
 				setSize = switchInfo->interfaces[interfaceIndex];
+
+			interfaceIndex++;
 		}
 
 		FD_SET(switchInfo->interpreterFD, &readFDs);
@@ -663,7 +665,7 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 
 		interfaceIndex = 0;
 
-		while(interfaceIndex < 6 && switchInfo->interfaces[interfaceIndex]);
+		while(interfaceIndex < 6 && switchInfo->interfaces[interfaceIndex])
 		{
 			if(FD_ISSET(switchInfo->interfaces[interfaceIndex], &readFDs))
 			{
@@ -674,6 +676,8 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 
 				while(bytesRead < MAX_ETHERNET_PACKET_SIZE)
 					bytesRead += read(switchInfo->interfaces[interfaceIndex], (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
+
+				// TODO: if it's a broadcast, send to everyone
 
 				int destInterfaceIndex = 0;
 				int foundDest = 0;
@@ -698,6 +702,8 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 				if(!foundDest)
 					printf("Switch discarded packet for unknown MAC %d", GetEthernetPacketDestMAC(buffer));
 			}
+
+			interfaceIndex++;
 		}
 
 		if(FD_ISSET(switchInfo->interpreterFD, &readFDs))
@@ -708,14 +714,16 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 			read(switchInfo->interpreterFD, (void *)&buffer, 1);
 
 			if(buffer[0] = 1)
+			{
 				done = 1;
+				printf("Switch got done message\n");
+			}
 		}
 	}
 }
 
 void ActAsRouter(RouterInfo *routerInfo)
 {
-
 	int done = 0;
 	int rc;
 	int bytesRead;
@@ -735,6 +743,8 @@ void ActAsRouter(RouterInfo *routerInfo)
 
 			if(setSize < routerInfo->interfaces[interfaceIndex])
 				setSize = routerInfo->interfaces[interfaceIndex];
+
+			interfaceIndex++;
 		}
 
 		FD_SET(routerInfo->interpreterFD, &readFDs);
@@ -764,7 +774,10 @@ void ActAsRouter(RouterInfo *routerInfo)
 					bytesRead += read(routerInfo->interfaces[interfaceIndex], (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
 
 				// TODO: print that I received a message
+				puts("received a message");
 			}
+
+			interfaceIndex++;
 		}
 
 		if(FD_ISSET(routerInfo->interpreterFD, &readFDs))
@@ -787,7 +800,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 				read(routerInfo->interpreterFD, (void *)&receiver, 1);
 				read(routerInfo->interpreterFD, (void *)&sender, 1);
 
-				int bytesRead = read(routerInfo->interpreterFD, (void *)&message, 100);
+				bytesRead = read(routerInfo->interpreterFD, (void *)&message, 100);
 
 				while(bytesRead < 100)
 					bytesRead += read(routerInfo->interpreterFD, (void *)&message + bytesRead, 100 - bytesRead);
@@ -807,7 +820,6 @@ void ActAsRouter(RouterInfo *routerInfo)
 					interfaceIndex++;
 				}
 
-				// TODO: free this
 				char *packetToSend = CreateEthernetPacket(receiver[0],
 														  sender[0],
 														  (unsigned char)0,
@@ -818,6 +830,8 @@ void ActAsRouter(RouterInfo *routerInfo)
 
 				while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
 					bytesWritten += write(sendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+				free(packetToSend);
 			}
 		}
 	}
@@ -825,7 +839,87 @@ void ActAsRouter(RouterInfo *routerInfo)
 
 void ActAsHost(HostInfo *hostInfo)
 {
+	int done = 0;
+	int rc;
+	int bytesRead;
+	int setSize = 0;
+	fd_set readFDs;
+	unsigned char buffer[MAX_ETHERNET_PACKET_SIZE];
 
+	while(!done)
+	{
+		FD_ZERO(&readFDs);
+
+		FD_SET(hostInfo->interface, &readFDs);
+		setSize = hostInfo->interface;
+
+		FD_SET(hostInfo->interpreterFD, &readFDs);
+
+		if(setSize < hostInfo->interpreterFD)
+			setSize = hostInfo->interpreterFD;
+
+		setSize++;
+
+		rc = select(setSize, &readFDs, NULL, NULL, NULL);
+
+		if(rc == -1 && errno == EINTR)
+			continue;
+
+		if(FD_ISSET(hostInfo->interface, &readFDs))
+		{
+			bytesRead = read(hostInfo->interface, (void *)&buffer, MAX_ETHERNET_PACKET_SIZE);
+
+			if(bytesRead)
+			{
+				while(bytesRead < MAX_ETHERNET_PACKET_SIZE)
+					bytesRead += read(hostInfo->interface, (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
+
+					// TODO: print that I received a message
+					puts("received message");
+			}
+		}
+
+		if(FD_ISSET(hostInfo->interpreterFD, &readFDs))
+		{
+			char charBuffer[1];
+
+			read(hostInfo->interpreterFD, (void *)&buffer, 1);
+
+			// (2) for macsend, (1) for done
+			if(buffer[0] == 1)
+			{
+				done = 1;
+			}
+			else if(buffer[0] == 2)
+			{
+				char receiver[1];
+				char sender[1];
+				char message[100];
+
+				read(hostInfo->interpreterFD, (void *)&receiver, 1);
+				read(hostInfo->interpreterFD, (void *)&sender, 1);
+
+				bytesRead = read(hostInfo->interpreterFD, (void *)&message, 100);
+
+				while(bytesRead < 100)
+					bytesRead += read(hostInfo->interpreterFD, (void *)&message + bytesRead, 100 - bytesRead);
+
+				// send the macsend
+				char *packetToSend = CreateEthernetPacket(receiver[0],
+														  sender[0],
+														  (unsigned char)0,
+														  4 + strlen(message),
+														  message);
+
+				int bytesWritten = write(hostInfo->interface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
+
+				while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
+					bytesWritten += write(hostInfo->interface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+				free(packetToSend);
+			}
+		}
+	}
 }
 
 // TODO: free the memory returned by this
