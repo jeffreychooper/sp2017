@@ -20,8 +20,6 @@
 #define EXTRA_OPERATIONS 10
 #define MAX_ETHERNET_PACKET_SIZE 104
 
-enum NodeType { SWITCH, ROUTER, HOST };
-
 // switch information
 typedef struct {
 
@@ -330,6 +328,9 @@ int main(int argc, char *argv[])
 
 					interfaceIndex++;
 				}
+
+				if(tempSwitchInfo->interpreterFD == i)
+					isMine = 1;
 
 				if(!isMine)
 					close(i);
