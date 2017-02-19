@@ -482,8 +482,8 @@ int main(int argc, char *argv[])
 		{
 			if(strcmp(operations[operationsIndex][1], "tty") == 0)
 			{
-				fputs("press return to continue", stdout);
-				// TODO: getchar();
+				puts("press return to continue");
+				getchar();
 			}
 			else
 			{
@@ -589,10 +589,6 @@ int main(int argc, char *argv[])
 	char messageFlagBuffer[1];
 	messageFlagBuffer[0] = 1;
 
-	int debug = 0;
-	while(!debug)
-		;
-
 	for(int i = 0; i < numSwitches; i++)
 	{
 		write(switchControlFDs[i], (void *)&messageFlagBuffer, 1);
@@ -634,6 +630,7 @@ void FreeOperationsMemory(char ***operations, int currMaxOperations)
 void ActAsSwitch(SwitchInfo *switchInfo)
 {
 	int done = 0;
+	int doneWithInterface[6] = { 0 };
 	int rc;
 	int bytesRead;
 	int setSize = 0;
@@ -648,10 +645,13 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 
 		while(interfaceIndex < 6 && switchInfo->interfaces[interfaceIndex])
 		{
-			FD_SET(switchInfo->interfaces[interfaceIndex], &readFDs);
+			if(!doneWithInterface[interfaceIndex])
+			{
+				FD_SET(switchInfo->interfaces[interfaceIndex], &readFDs);
 
-			if(setSize < switchInfo->interfaces[interfaceIndex])
-				setSize = switchInfo->interfaces[interfaceIndex];
+				if(setSize < switchInfo->interfaces[interfaceIndex])
+					setSize = switchInfo->interfaces[interfaceIndex];
+			}
 
 			interfaceIndex++;
 		}
@@ -679,7 +679,11 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 				bytesRead = read(switchInfo->interfaces[interfaceIndex], (void *)&buffer, MAX_ETHERNET_PACKET_SIZE);
 
 				if(!bytesRead)
+				{
+					doneWithInterface[interfaceIndex] = 1;
+
 					break;
+				}
 
 				while(bytesRead < MAX_ETHERNET_PACKET_SIZE)
 					bytesRead += read(switchInfo->interfaces[interfaceIndex], (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
@@ -709,7 +713,8 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 				}
 
 				if(!foundDest)
-					printf("Switch discarded packet for unknown MAC %d", GetEthernetPacketDestMAC(buffer));
+					puts("discarded a packet for an unknown MAC");
+					// TODO: printf("Switch discarded packet for unknown MAC %d", GetEthernetPacketDestMAC(buffer));
 			}
 
 			interfaceIndex++;
@@ -725,7 +730,6 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 			if(buffer[0] = 1)
 			{
 				done = 1;
-				printf("Switch got done message\n");
 			}
 		}
 	}
@@ -734,6 +738,7 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 void ActAsRouter(RouterInfo *routerInfo)
 {
 	int done = 0;
+	int doneWithInterface[6] = { 0 };
 	int rc;
 	int bytesRead;
 	int setSize = 0;
@@ -748,10 +753,13 @@ void ActAsRouter(RouterInfo *routerInfo)
 		
 		while(interfaceIndex < 6 && routerInfo->interfaces[interfaceIndex])
 		{
-			FD_SET(routerInfo->interfaces[interfaceIndex], &readFDs);
+			if(!doneWithInterface[interfaceIndex])
+			{
+				FD_SET(routerInfo->interfaces[interfaceIndex], &readFDs);
 
-			if(setSize < routerInfo->interfaces[interfaceIndex])
-				setSize = routerInfo->interfaces[interfaceIndex];
+				if(setSize < routerInfo->interfaces[interfaceIndex])
+					setSize = routerInfo->interfaces[interfaceIndex];
+			}
 
 			interfaceIndex++;
 		}
@@ -780,7 +788,10 @@ void ActAsRouter(RouterInfo *routerInfo)
 				bytesRead = read(routerInfo->interfaces[interfaceIndex], (void *)&buffer, MAX_ETHERNET_PACKET_SIZE);
 
 				if(!bytesRead)
+				{
+					doneWithInterface[interfaceIndex] = 1;
 					break;
+				}
 
 				while(bytesRead < MAX_ETHERNET_PACKET_SIZE)
 					bytesRead += read(routerInfo->interfaces[interfaceIndex], (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
@@ -852,6 +863,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 void ActAsHost(HostInfo *hostInfo)
 {
 	int done = 0;
+	int doneWithInterface = 0;
 	int rc;
 	int bytesRead;
 	int setSize = 0;
@@ -862,8 +874,11 @@ void ActAsHost(HostInfo *hostInfo)
 	{
 		FD_ZERO(&readFDs);
 
-		FD_SET(hostInfo->interface, &readFDs);
-		setSize = hostInfo->interface;
+		if(!doneWithInterface)
+		{
+			FD_SET(hostInfo->interface, &readFDs);
+			setSize = hostInfo->interface;
+		}
 
 		FD_SET(hostInfo->interpreterFD, &readFDs);
 
@@ -888,6 +903,11 @@ void ActAsHost(HostInfo *hostInfo)
 
 					// TODO: print that I received a message
 					puts("received message");
+			}
+			else
+			{
+				// remove from the set
+				doneWithInterface = 1;
 			}
 		}
 		else if(FD_ISSET(hostInfo->interpreterFD, &readFDs))
