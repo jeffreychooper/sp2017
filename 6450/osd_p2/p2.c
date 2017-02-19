@@ -57,7 +57,7 @@ void ActAsSwitch(SwitchInfo *switchInfo);
 void ActAsRouter(RouterInfo *routerInfo);
 void ActAsHost(HostInfo *hostInfo);
 unsigned char *CreateEthernetPacket(unsigned char destMAC, unsigned char srcMAC, unsigned char type, unsigned char length, char *payload);
-int GetEthernetPacketDestMAC(char *packet);
+int GetEthernetPacketDestMAC(unsigned char *packet);
 
 int main(int argc, char *argv[])
 {
@@ -506,8 +506,8 @@ int main(int argc, char *argv[])
 					if(routers[index].MACs[macIndex] == senderMAC)
 					{
 						int routerInterface = routerControlFDs[index];
-						char charBuffer[1];
-						char buffer[100] = { 0 };
+						unsigned char charBuffer[1];
+						unsigned char buffer[100] = { 0 };
 
 						// 2 means macsend
 						charBuffer[0] = 2;
@@ -688,9 +688,25 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 				while(bytesRead < MAX_ETHERNET_PACKET_SIZE)
 					bytesRead += read(switchInfo->interfaces[interfaceIndex], (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
 
-				// TODO: if it's a broadcast, send to everyone
-
 				int destInterfaceIndex = 0;
+
+				if(GetEthernetPacketDestMAC(buffer) == 255)
+				{
+					while(destInterfaceIndex < 6 && switchInfo->interfaces[destInterfaceIndex])
+					{
+						int bytesWritten = 0;
+						
+						bytesWritten = write(switchInfo->interfaces[destInterfaceIndex], (void *)&buffer, MAX_ETHERNET_PACKET_SIZE);
+
+						while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
+							bytesWritten += write(switchInfo->interfaces[destInterfaceIndex], (void *)&buffer + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+						destInterfaceIndex++;
+					}
+
+					break;
+				}
+
 				int foundDest = 0;
 
 				while(destInterfaceIndex < 6 && switchInfo->interfaces[destInterfaceIndex])
@@ -723,7 +739,7 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 		if(!fdWasSet && FD_ISSET(switchInfo->interpreterFD, &readFDs))
 		{
 			// interpreter will only ever send a single byte to a switch... 1 means we're done
-			char buffer[1];
+			unsigned char buffer[1];
 
 			read(switchInfo->interpreterFD, (void *)&buffer, 1);
 
@@ -797,7 +813,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 					bytesRead += read(routerInfo->interfaces[interfaceIndex], (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
 
 				// TODO: print that I received a message
-				puts("received a message");
+				puts("router received a message");
 			}
 
 			interfaceIndex++;
@@ -902,7 +918,7 @@ void ActAsHost(HostInfo *hostInfo)
 					bytesRead += read(hostInfo->interface, (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
 
 					// TODO: print that I received a message
-					puts("received message");
+					puts("host received a message");
 			}
 			else
 			{
@@ -968,7 +984,7 @@ unsigned char *CreateEthernetPacket(unsigned char destMAC, unsigned char srcMAC,
 	return returnPacket;
 }
 
-int GetEthernetPacketDestMAC(char *packet)
+int GetEthernetPacketDestMAC(unsigned char *packet)
 {
 	int returnValue = packet[0];
 
