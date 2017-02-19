@@ -74,8 +74,8 @@ int MPI_Gather(void* , int, MPI_Datatype, void*, int, MPI_Datatype, int, MPI_Com
 int MPI_Barrier(MPI_Comm );
 int MPI_Bcast(void*, int, MPI_Datatype, int, MPI_Comm );
 int MPI_Comm_dup(MPI_Comm, MPI_Comm *);
-int MPI_Comm_size(MPI_Comm, int *);
 int MPI_Comm_rank(MPI_Comm, int *);
+int MPI_Comm_size(MPI_Comm, int *);
 int MPI_Isend(void*, int, MPI_Datatype, int, int, MPI_Comm, MPI_Request *);
 int MPI_Irecv(void*, int, MPI_Datatype, int, int, MPI_Comm, MPI_Request *);
 int MPI_Probe(int, int, MPI_Comm, MPI_Status *);
