@@ -691,7 +691,7 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 
 				while(destInterfaceIndex < 6 && switchInfo->interfaces[destInterfaceIndex])
 				{
-					if(switchInfo->interfaces[destInterfaceIndex] == GetEthernetPacketDestMAC(buffer))
+					if(switchInfo->knownMACs[destInterfaceIndex] == GetEthernetPacketDestMAC(buffer))
 					{
 						foundDest = 1;
 
