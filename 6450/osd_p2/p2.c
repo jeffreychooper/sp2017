@@ -163,7 +163,7 @@ int main(int argc, char *argv[])
 					if(p = strtok(NULL, "\n"))
 						strcpy(operations[lineCount][1], p);
 					else
-						break;
+						operations[lineCount][tokenIndex][0] = '\n';
 				}
 				else
 				{
