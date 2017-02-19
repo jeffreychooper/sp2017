@@ -483,7 +483,7 @@ int main(int argc, char *argv[])
 			if(strcmp(operations[operationsIndex][1], "tty") == 0)
 			{
 				fputs("press return to continue", stdout);
-				//TODO: uncomment getchar();
+				// TODO: getchar();
 			}
 			else
 			{
@@ -591,7 +591,7 @@ int main(int argc, char *argv[])
 
 	for(int i = 0; i < numSwitches; i++)
 	{
-		// write(switchControlFDs[i], (void *)&messageFlagBuffer, 1);
+		write(switchControlFDs[i], (void *)&messageFlagBuffer, 1);
 	}
 
 	for(int i = 0; i < numRouters; i++)
@@ -665,11 +665,13 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 			continue;
 
 		interfaceIndex = 0;
+		int fdWasSet = 0;
 
 		while(interfaceIndex < 6 && switchInfo->interfaces[interfaceIndex])
 		{
 			if(FD_ISSET(switchInfo->interfaces[interfaceIndex], &readFDs))
 			{
+				fdWasSet = 1;
 				bytesRead = read(switchInfo->interfaces[interfaceIndex], (void *)&buffer, MAX_ETHERNET_PACKET_SIZE);
 
 				if(!bytesRead)
@@ -707,7 +709,7 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 			interfaceIndex++;
 		}
 
-		if(FD_ISSET(switchInfo->interpreterFD, &readFDs))
+		if(!fdWasSet && FD_ISSET(switchInfo->interpreterFD, &readFDs))
 		{
 			// interpreter will only ever send a single byte to a switch... 1 means we're done
 			char buffer[1];
@@ -761,11 +763,14 @@ void ActAsRouter(RouterInfo *routerInfo)
 			continue;
 
 		interfaceIndex = 0;
+		int fdWasSet = 0;
 
 		while(interfaceIndex < 6 && routerInfo->interfaces[interfaceIndex])
 		{
 			if(FD_ISSET(routerInfo->interfaces[interfaceIndex], &readFDs))
 			{
+				fdWasSet = 1;
+
 				bytesRead = read(routerInfo->interfaces[interfaceIndex], (void *)&buffer, MAX_ETHERNET_PACKET_SIZE);
 
 				if(!bytesRead)
@@ -781,7 +786,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 			interfaceIndex++;
 		}
 
-		if(FD_ISSET(routerInfo->interpreterFD, &readFDs))
+		if(!fdWasSet && FD_ISSET(routerInfo->interpreterFD, &readFDs))
 		{
 			char charBuffer[1];
 
@@ -879,8 +884,7 @@ void ActAsHost(HostInfo *hostInfo)
 					puts("received message");
 			}
 		}
-
-		if(FD_ISSET(hostInfo->interpreterFD, &readFDs))
+		else if(FD_ISSET(hostInfo->interpreterFD, &readFDs))
 		{
 			char charBuffer[1];
 
