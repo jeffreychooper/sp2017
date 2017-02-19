@@ -589,6 +589,10 @@ int main(int argc, char *argv[])
 	char messageFlagBuffer[1];
 	messageFlagBuffer[0] = 1;
 
+	int debug = 0;
+	while(!debug)
+		;
+
 	for(int i = 0; i < numSwitches; i++)
 	{
 		write(switchControlFDs[i], (void *)&messageFlagBuffer, 1);
@@ -700,6 +704,8 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 
 						break;
 					}
+
+					destInterfaceIndex++;
 				}
 
 				if(!foundDest)
