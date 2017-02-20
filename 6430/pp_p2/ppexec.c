@@ -9,8 +9,13 @@
 
 #define HOSTNAME_LENGTH 1024
 #define CWD_LENGTH 1024
+#define MIN_PORT 4500
+#define MAX_PORT 4599
+#define DEFAULT_BACKLOG 5
 
 char *MakeCommandString(int rank, int numRanks, int numHosts, char *mainHostname, int userCommandLength, char *userCommandString);
+void ErrorCheck(int val, char *str);
+int SetupAcceptSocket();
 
 int main(int argc, char *argv[])
 {
@@ -139,6 +144,9 @@ int main(int argc, char *argv[])
 		fclose(hostsfile);
 	}
 
+	// get the listening port ready
+	int acceptSocket = SetupAcceptSocket();
+
 	// make the bash command that will be used to run the user's program
 	// ex: bash -c "PP_MPI_RANK={rank} PP_MPI_SIZE={numHosts} PP_MPI_HOST_PORT={mainHost}:9999 {program and args entered by the user}"
 	char *command;
@@ -190,6 +198,7 @@ int main(int argc, char *argv[])
 		free(hostnames[i]);
 	}
 
+	// alternate between wait and select... taking care of business
 	int waitStatus;
 
 	while(wait(&waitStatus))
@@ -337,4 +346,43 @@ char *MakeCommandString(int rank, int numRanks, int numHosts, char *mainHostname
 	strncpy(returnString + stringPos, "\0", 1);
 
 	return returnString;
+}
+
+void ErrorCheck(int val, char *str)
+{
+    if(val < 0)
+    {
+        printf("%s : %d : %s\n", str, val, strerror(errno));
+        exit(1);
+    }
+}
+
+int SetupAcceptSocket()
+{
+	int rc;
+
+	int acceptSocket = socket(AF_INET, SOCK_STREAM, 0);
+	ErrorCheck(acceptSocket, "SetupAcceptSocket socket");
+
+	int optVal = 1;
+	setsockopt(acceptSocket, SOL_SOCKET, SO_REUSEADDR, (char *)&optVal, sizeof(optVal));
+
+	struct sockaddr_in sin;
+	sin.sin_family = AF_INET;
+	sin.sin_addr.s_addr = INADDR_ANY;
+
+	for(int attemptPort = MIN_PORT, attemptPort <= MAX_PORT; attemptPort++)
+	{
+		sin.sin_port = htons(attemptPort);
+
+		rc = bind(acceptSocket, (struct sockaddr *)&sin, sizeof(sin));
+
+		if(!rc)
+			break;
+	}
+
+	rc = listen(acceptSocket, DEFAULT_BACKLOG);
+	ErrorCheck(rc, "SetupAcceptSocket listen");
+
+	return acceptSocket;
 }
