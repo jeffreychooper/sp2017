@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "mpi.h"
 #include <math.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
