@@ -1,4 +1,3 @@
-// I should write a function to concatenate any number of strings into a single string...
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +8,7 @@
 #include <sys/wait.h>
 
 #define HOSTNAME_LENGTH 1024
+#define CWD_LENGTH 1024
 
 char *MakeCommandString(int rank, int numRanks, int numHosts, char *mainHostname, int userCommandLength, char *userCommandString);
 
@@ -205,11 +205,27 @@ char *MakeCommandString(int rank, int numRanks, int numHosts, char *mainHostname
 	int rankDigits;
 	int sizeDigits;
 
+	char *cwd;
+
 	// will be run using ssh across multiple machines
 	if(numHosts > 1)
 	{
-		// bash -c '
-		stringLength += 9;
+		cwd = getcwd(NULL, 0);
+
+		// bash -c 'PWD=
+		stringLength += 13;
+
+		// cwd
+		stringLength += strlen(cwd);
+
+		// ; cd_
+		stringLength += 5;
+
+		// cwd
+		stringLength += strlen(cwd);
+
+		// ;_
+		stringLength += 2;
 
 		// the closing '
 		stringLength++;
@@ -274,8 +290,22 @@ char *MakeCommandString(int rank, int numRanks, int numHosts, char *mainHostname
 
 	if(numHosts > 1)
 	{
-		strncpy(returnString, "bash -c '", 9);
-		stringPos += 9;
+		strncpy(returnString, "bash -c 'PWD=", 13);
+		stringPos += 13;
+
+		strncpy(returnString + stringPos, cwd, strlen(cwd));
+		stringPos += strlen(cwd);
+
+		strncpy(returnString + stringPos, "; cd ", 5);
+		stringPos += 5;
+
+		strncpy(returnString + stringPos, cwd, strlen(cwd));
+		stringPos += strlen(cwd);
+
+		strncpy(returnString + stringPos, "; ", 2);
+		stringPos += 2;
+
+		free(cwd);
 	}
 
 	strncpy(returnString + stringPos, "PP_MPI_RANK=",  12);
