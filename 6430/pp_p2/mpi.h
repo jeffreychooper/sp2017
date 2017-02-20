@@ -61,6 +61,9 @@ typedef int MPI_Info;
 #define MPI_ERR_TRUNCATE    14      /* Message truncated on receive */
 
 
+#define MPI_ANY_SOURCE (-2)
+#define MPI_ANY_TAG (-1)
+
 /* We require that the C compiler support prototypes */
 /* Begin Prototypes */
 int MPI_Init(int *, char ***);
