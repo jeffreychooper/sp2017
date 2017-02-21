@@ -212,6 +212,10 @@ int main(int argc, char *argv[])
 	RankInfo ranks[numRanks];
 	int connectionMatrix[numRanks][numRanks];
 
+	for(int i = 0; i < numRanks; i++)
+		for(int j = 0; j < numRanks; j++)
+			connectionMatrix[i][j] = 0;
+
 	while(!done)
 	{
 
