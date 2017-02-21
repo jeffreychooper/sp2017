@@ -6,12 +6,20 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
 
 #define HOSTNAME_LENGTH 1024
 #define CWD_LENGTH 1024
 #define MIN_PORT 4500
 #define MAX_PORT 4599
 #define DEFAULT_BACKLOG 5
+
+typedef struct
+{
+	char *host;
+	int port;
+} RankInfo;
 
 char *MakeCommandString(int rank, int numRanks, int numHosts, char *mainHostname, int userCommandLength, char *userCommandString);
 void ErrorCheck(int val, char *str);
@@ -200,10 +208,14 @@ int main(int argc, char *argv[])
 
 	// alternate between wait and select... taking care of business
 	int waitStatus;
+	int done = 0;
+	RankInfo ranks[numRanks];
+	int connectionMatrix[numRanks][numRanks];
 
-	while(wait(&waitStatus))
-		if(errno == ECHILD)
-			break;
+	while(!done)
+	{
+
+	}
 
 	return 0;
 }
@@ -371,7 +383,7 @@ int SetupAcceptSocket()
 	sin.sin_family = AF_INET;
 	sin.sin_addr.s_addr = INADDR_ANY;
 
-	for(int attemptPort = MIN_PORT, attemptPort <= MAX_PORT; attemptPort++)
+	for(int attemptPort = MIN_PORT; attemptPort <= MAX_PORT; attemptPort++)
 	{
 		sin.sin_port = htons(attemptPort);
 
