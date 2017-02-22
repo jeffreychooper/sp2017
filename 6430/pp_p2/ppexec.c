@@ -207,7 +207,8 @@ int main(int argc, char *argv[])
 	}
 
 	// alternate between wait and select... taking care of business
-	int waitStatus;
+	int pid;
+	int processesDone = 0;
 	int done = 0;
 	RankInfo ranks[numRanks];
 	int connectionMatrix[numRanks][numRanks];
@@ -218,7 +219,13 @@ int main(int argc, char *argv[])
 
 	while(!done)
 	{
+		if(pid = waitpid(-1, NULL, WNOHANG))
+			processesDone++;
 
+		if(processesDone > numRanks)
+			break;
+
+		// select
 	}
 
 	return 0;

@@ -1,4 +1,5 @@
 // TODO: make changes so my output can print device names
+// TODO: sending hosts also need to print a message
 // SOCKPAIR SIDES
 // 0 interpreter-switch 1
 // 0 interpreter-host/router 1
