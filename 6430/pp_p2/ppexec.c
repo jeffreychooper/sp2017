@@ -31,7 +31,7 @@ int SetupAcceptSocket();
 int AcceptConnection(int acceptSocket);
 
 // TODO: can this be done without a global cleanly?
-int selectedPort;		// the port that we're listening on
+int listeningPort;		// the port that we're listening on
 
 int main(int argc, char *argv[])
 {
@@ -375,9 +375,16 @@ char *MakeCommandString(int rank, int numRanks, int numHosts, char *mainHostname
 
 	stringLength += strlen(mainHostname);
 
-	// :9999_ (6 chars)
-	stringLength += 6;
+	// : (1 chars)
+	stringLength += 1;
 
+	// the port we're listening on is between 4500-4599... 4 digits
+	stringLength += 4;
+	
+	// space
+	stringLength += 1;
+
+	// the user's command
 	stringLength += userCommandLength - 1;
 
 	// null termitation...
@@ -422,8 +429,12 @@ char *MakeCommandString(int rank, int numRanks, int numHosts, char *mainHostname
 	stringPos += 18;
 	strncpy(returnString + stringPos, mainHostname, strlen(mainHostname));
 	stringPos += strlen(mainHostname);
-	strncpy(returnString + stringPos, ":9999 ", 6);
-	stringPos += 6;
+	strncpy(returnString + stringPos, ":", 1);
+	stringPos++;
+	snprintf(returnString + stringPos, 5, "%d", listeningPort);
+	stringPos += 4;
+	strncpy(returnString + stringPos, " ", 1);
+	stringPos++;
 
 	strncpy(returnString + stringPos, userCommandString, userCommandLength - 1);
 	stringPos += userCommandLength - 1;
@@ -470,7 +481,7 @@ int SetupAcceptSocket()
 
 		if(!rc)
 		{
-			selectedPort = attemptPort;
+			listeningPort = attemptPort;
 			break;
 		}
 	}
