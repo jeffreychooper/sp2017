@@ -73,6 +73,8 @@ int main(int argc, char *argv[])
 			break;
 		}
 	}
+
+	RankInfo ranks[numRanks];
 	
 	// find the length of the user's command and make a string out of it
 	while(argc > currArg)
@@ -172,6 +174,9 @@ int main(int argc, char *argv[])
 		// no hosts specified... run locally
 		for(int i = 0; i < numRanks; i++)
 		{
+			ranks[i].host = mainHostname;
+			ranks[i].globalRank = i;
+
 			command = MakeCommandString(i, numRanks, 1, mainHostname, userCommandLength, userCommandString);
 
 			forkRC = fork();
@@ -190,6 +195,9 @@ int main(int argc, char *argv[])
 	{
 		for(int i = 0; i < numRanks; i++)
 		{
+			ranks[i].host = hostnames[i % numHosts];
+			ranks[i].globalRank = i;
+
 			command = MakeCommandString(i, numRanks, numHosts, mainHostname, userCommandLength, userCommandString);
 
 			forkRC = fork();
@@ -217,7 +225,6 @@ int main(int argc, char *argv[])
 	int pid;
 	int processesDone = 0;
 	int done = 0;
-	RankInfo ranks[numRanks];
 	int connectionMatrix[numRanks][numRanks];
 	fd_set readFDs;
 	struct timeval tv;
