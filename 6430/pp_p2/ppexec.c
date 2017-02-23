@@ -1,3 +1,4 @@
+// TODO: get rank info ready while they're being set up
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +23,7 @@ typedef struct
 	int globalRank;
 	char *host;
 	int port;
+	int controlSocket;
 } RankInfo;
 
 char *MakeCommandString(int rank, int numRanks, int numHosts, char *mainHostname, int userCommandLength, char *userCommandString);
@@ -255,6 +257,12 @@ int main(int argc, char *argv[])
 			// accept connection
 			// need to keep track of who it is so we can check for later messages on the socket we open
 			int newSocketFD = AcceptConnection(acceptSocket);
+			
+			// read the rank of the new connection
+			unsigned char newSocketRank;
+			read(newSocketFD, (void *)&newSocketRank, sizeof(unsigned char));
+
+			ranks[(int)newSocketRank].controlSocket = newSocketFD;
 		}
 	}
 
