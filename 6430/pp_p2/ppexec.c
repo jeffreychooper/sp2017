@@ -1,4 +1,3 @@
-// TODO: get rank info ready while they're being set up
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -176,6 +175,8 @@ int main(int argc, char *argv[])
 		{
 			ranks[i].host = mainHostname;
 			ranks[i].globalRank = i;
+			ranks[i].controlSocket = 0;
+			ranks[i].port = 0;
 
 			command = MakeCommandString(i, numRanks, 1, mainHostname, userCommandLength, userCommandString);
 
@@ -197,6 +198,8 @@ int main(int argc, char *argv[])
 		{
 			ranks[i].host = hostnames[i % numHosts];
 			ranks[i].globalRank = i;
+			ranks[i].controlSocket = 0;
+			ranks[i].port = 0;
 
 			command = MakeCommandString(i, numRanks, numHosts, mainHostname, userCommandLength, userCommandString);
 
@@ -247,6 +250,16 @@ int main(int argc, char *argv[])
 		// select
 		FD_ZERO(&readFDs);
 
+		for(int i = 0; i < numRanks; i++)
+		{
+			int rankSocket = ranks[i].controlSocket;
+			if(rankSocket != 0)
+				FD_SET(rankSocket, &readFDs);
+
+			if(rankSocket > fdSetSize)
+				fdSetSize = rankSocket;
+		}
+
 		FD_SET(acceptSocket, &readFDs);
 
 		if(acceptSocket > fdSetSize)
@@ -259,13 +272,20 @@ int main(int argc, char *argv[])
 		if(rc == -1 && errno == EINTR)
 			continue;
 
+		for(int i = 0; i < numRanks; i++)
+		{
+			int rankSocket = ranks[i].controlSocket;
+
+			if(rankSocket != 0 && FD_ISSET(rankSocket, &readFDs))
+			{
+				// TODO: handle requests from children
+			}
+		}
+
 		if(FD_ISSET(acceptSocket, &readFDs))
 		{
-			// accept connection
-			// need to keep track of who it is so we can check for later messages on the socket we open
 			int newSocketFD = AcceptConnection(acceptSocket);
 			
-			// read the rank of the new connection
 			unsigned char newSocketRank;
 			read(newSocketFD, (void *)&newSocketRank, sizeof(unsigned char));
 
