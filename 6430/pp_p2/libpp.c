@@ -2,6 +2,8 @@
 
 int MPI_Init(int *argc, char ***argv)
 {
+	// attempt to connect to the control process
+
 	return 0;
 }
 

@@ -30,6 +30,9 @@ void ErrorCheck(int val, char *str);
 int SetupAcceptSocket();
 int AcceptConnection(int acceptSocket);
 
+// TODO: can this be done without a global cleanly?
+int selectedPort;		// the port that we're listening on
+
 int main(int argc, char *argv[])
 {
 	char *hostsfilePath = "hostnames";
@@ -466,7 +469,10 @@ int SetupAcceptSocket()
 		rc = bind(acceptSocket, (struct sockaddr *)&sin, sizeof(sin));
 
 		if(!rc)
+		{
+			selectedPort = attemptPort;
 			break;
+		}
 	}
 
 	rc = listen(acceptSocket, DEFAULT_BACKLOG);
