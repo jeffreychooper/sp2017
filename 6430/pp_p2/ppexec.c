@@ -8,15 +8,18 @@
 #include <sys/wait.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <netinet/tcp.h>
 
 #define HOSTNAME_LENGTH 1024
 #define CWD_LENGTH 1024
 #define MIN_PORT 4500
 #define MAX_PORT 4599
 #define DEFAULT_BACKLOG 5
+#define SELECT_TIMEOUT 1
 
 typedef struct
 {
+	int globalRank;
 	char *host;
 	int port;
 } RankInfo;
@@ -24,6 +27,7 @@ typedef struct
 char *MakeCommandString(int rank, int numRanks, int numHosts, char *mainHostname, int userCommandLength, char *userCommandString);
 void ErrorCheck(int val, char *str);
 int SetupAcceptSocket();
+int AcceptConnection(int acceptSocket);
 
 int main(int argc, char *argv[])
 {
@@ -207,11 +211,17 @@ int main(int argc, char *argv[])
 	}
 
 	// alternate between wait and select... taking care of business
+	int rc;
 	int pid;
 	int processesDone = 0;
 	int done = 0;
 	RankInfo ranks[numRanks];
 	int connectionMatrix[numRanks][numRanks];
+	fd_set readFDs;
+	struct timeval tv;
+	int fdSetSize = 0;
+
+	tv.tv_sec = SELECT_TIMEOUT;
 
 	for(int i = 0; i < numRanks; i++)
 		for(int j = 0; j < numRanks; j++)
@@ -226,6 +236,26 @@ int main(int argc, char *argv[])
 			break;
 
 		// select
+		FD_ZERO(&readFDs);
+
+		FD_SET(acceptSocket, &readFDs);
+
+		if(acceptSocket > fdSetSize)
+			fdSetSize = acceptSocket;
+
+		fdSetSize++;
+
+		rc = select(fdSetSize, &readFDs, NULL, NULL, &tv);
+
+		if(rc == -1 && errno == EINTR)
+			continue;
+
+		if(FD_ISSET(acceptSocket, &readFDs))
+		{
+			// accept connection
+			// need to keep track of who it is so we can check for later messages on the socket we open
+			int newSocketFD = AcceptConnection(acceptSocket);
+		}
 	}
 
 	return 0;
@@ -408,4 +438,33 @@ int SetupAcceptSocket()
 	ErrorCheck(rc, "SetupAcceptSocket listen");
 
 	return acceptSocket;
+}
+
+int AcceptConnection(int acceptSocket)
+{
+	int newSocket;
+	struct sockaddr_in from;
+	socklen_t fromLen = sizeof(from);
+
+	int success = 0;
+
+	while(!success)
+	{
+		newSocket = accept(acceptSocket, (struct sockaddr *)&from, &fromLen);
+
+		if(newSocket == -1)
+		{
+			if(errno == EINTR)
+				continue;
+
+			ErrorCheck(newSocket, "AcceptConnection accept");
+		}
+		else
+			success = 1;
+	}
+
+	int optVal = 1;
+	setsockopt(newSocket, IPPROTO_TCP, TCP_NODELAY, (char *)&optVal, sizeof(optVal));
+
+	return newSocket;
 }
