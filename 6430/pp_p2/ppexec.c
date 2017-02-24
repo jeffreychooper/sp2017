@@ -20,6 +20,7 @@
 #define CONNECT_FLAG 1
 #define QUIT_FLAG 2
 #define BARRIER_FLAG 3
+#define CONNECT_FLAG 4
 
 typedef struct
 {

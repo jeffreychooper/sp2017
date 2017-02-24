@@ -14,6 +14,7 @@
 #define DEFAULT_BACKLOG 5
 #define QUIT_FLAG 2
 #define BARRIER_FLAG 3
+#define CONNECT_FLAG 4
 
 static int MPI_World_rank;
 static int MPI_World_size;
@@ -21,10 +22,10 @@ static char *MPI_Control_host;
 static int MPI_Control_port;
 static char MPI_My_host[HOSTNAME_LENGTH];
 static int MPI_My_listen_port;
-int *MPI_Rank_sockets;
 
 static int MPI_Control_socket;
 static int MPI_My_accept_socket;
+int *MPI_Rank_sockets;
 
 void ErrorCheck(int val, char *str);
 int SetupAcceptSocket();
@@ -226,10 +227,26 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI
 		return MPI_ERR_TAG;
 
 	// if no connection to the destination...
-	if(MPI_Rank_sockets[dest])
+	if(MPI_Rank_sockets[dest] == -1)
 	{
-		// get dest's listen port from ppexec
-		// connect to dest
+		// tell ppexec I need to connect to someone
+		int connectFlag = CONNECT_FLAG;
+		write(MPI_Control_socket, (void *)&connectFlag, sizeof(int));
+
+		// tell ppexec which comm I'm talking about
+		write(MPI_Control_socket, (void *)&comm, sizeof(int));
+		
+		// tell ppexec which rank I want to connect to
+		write(MPI_Control_socket, (void *)&dest, sizeof(int));
+
+		// get the host and port back from ppexec
+		char destHost[HOSTNAME_LENGTH];
+		int destPort;
+
+		read(MPI_Control_socket, (void *)&destHost, HOSTNAME_LENGTH * sizeof(char));
+		read(MPI_Control_socket, (void *)&destPort, sizeof(int));
+
+		// TODO: connect to dest
 	}
 	
 	// send message (only int/char now)... I can probably just send it off
