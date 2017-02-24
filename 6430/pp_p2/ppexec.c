@@ -289,10 +289,19 @@ int main(int argc, char *argv[])
 		{
 			int newSocketFD = AcceptConnection(acceptSocket);
 			
-			unsigned char newSocketRank;
-			read(newSocketFD, (void *)&newSocketRank, sizeof(unsigned char));
+			// get child's rank, host, and port
+			int newSocketRank;
+			read(newSocketFD, (void *)&newSocketRank, sizeof(int));
+			ranks[newSocketRank].controlSocket = newSocketFD;
 
-			ranks[(int)newSocketRank].controlSocket = newSocketFD;
+			int hostLength;
+			read(newSocketFD, (void *)&hostLength, sizeof(int));
+
+			ranks[newSocketRank].host = malloc((hostLength + 1) * sizeof(char));	// TODO: free this at the very end
+			read(newSocketFD, (void *)&ranks[newSocketRank].host, hostLength);
+			ranks[newSocketRank].host[hostLength] = '\0';
+
+			read(newSocketFD, (void *)&ranks[newSocketRank].port, sizeof(int));
 		}
 	}
 

@@ -7,6 +7,8 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <netdb.h>
+#include <netinet/tcp.h>
 
 #define HOSTNAME_LENGTH 1024
 #define DEFAULT_BACKLOG 5
@@ -16,8 +18,9 @@ static int MPI_World_size;
 static char *MPI_Control_host;		// TODO: free in finalize
 static int MPI_Control_port;
 static char MPI_My_host[HOSTNAME_LENGTH];
-static int MPI_My_port;
+static int MPI_My_listen_port;
 
+static int MPI_Control_socket;
 static int MPI_My_accept_socket;
 
 void ErrorCheck(int val, char *str);
@@ -55,9 +58,42 @@ int MPI_Init(int *argc, char ***argv)
 	socklen_t sinLength = sizeof(sin);
 	rc = getsockname(MPI_My_accept_socket, (struct sockaddr *)&sin, &sinLength);
 	ErrorCheck(rc, "MPI_Init getsockname");
-	MPI_My_port = sin.sin_port;
+	MPI_My_listen_port = sin.sin_port;
 
-	// connect to ppexec and tell it my host/port
+	// connect to ppexec
+	struct sockaddr_in listener;
+	struct hostent *hp;
+	int optVal = 1;
+
+	hp = gethostbyname(MPI_Control_host);
+
+	if(!hp)
+	{
+        printf("%s : %s\n", "MPI_Init gethostbyname", strerror(errno));
+        exit(1);
+	}
+
+	memset((void *)&listener, '0', sizeof(listener));
+	memcpy((void *)&listener.sin_addr, (void *)hp->h_addr, hp->h_length);
+	listener.sin_family = hp->h_addrtype;
+	listener.sin_port = htons(MPI_Control_port);
+
+	MPI_Control_socket = socket(AF_INET, SOCK_STREAM, 0);
+	ErrorCheck(MPI_Control_socket, "MPI_Init socket");
+
+	setsockopt(MPI_Control_socket, IPPROTO_TCP, TCP_NODELAY, (char *)&optVal, sizeof(optVal));
+
+	rc = connect(MPI_Control_socket, (struct sockaddr *)&listener, sizeof(listener));
+	ErrorCheck(rc, "MPI_Init connect");
+
+	// tell ppexec my rank, host, and port
+	write(MPI_Control_socket, (void *)&MPI_World_rank, sizeof(int));
+
+	int myHostLength = HOSTNAME_LENGTH;
+	write(MPI_Control_socket, (void *)&myHostLength, sizeof(int));
+	write(MPI_Control_socket, (void *)&MPI_My_host, myHostLength);
+
+	write(MPI_Control_socket, (void *)&MPI_My_listen_port, sizeof(int));
 
 	return MPI_SUCCESS;
 }
