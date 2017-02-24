@@ -12,10 +12,11 @@
 
 #define HOSTNAME_LENGTH 1024
 #define DEFAULT_BACKLOG 5
+#define QUIT_FLAG 2
 
 static int MPI_World_rank;
 static int MPI_World_size;
-static char *MPI_Control_host;		// TODO: free in finalize
+static char *MPI_Control_host;
 static int MPI_Control_port;
 static char MPI_My_host[HOSTNAME_LENGTH];
 static int MPI_My_listen_port;
@@ -100,6 +101,41 @@ int MPI_Init(int *argc, char ***argv)
 
 int MPI_Finalize(void)
 {
+	// close sockets (not ppexec)
+	close(MPI_My_accept_socket);
+
+	// free memory
+	free(MPI_Control_host);
+
+	// tell ppexec I'm ready
+	int quitFlag = QUIT_FLAG;
+	write(MPI_Control_socket, (void *)&quitFlag, sizeof(int));
+
+	// select on ppexec until it says we can go
+	int rc;
+	fd_set readFDs;
+	int fdSetSize = MPI_Control_socket + 1;
+
+	while(1)
+	{
+		FD_ZERO(&readFDs);
+
+		FD_SET(MPI_Control_socket);
+
+		rc = select(fdSetSize, &readFDs, NULL, NULL, NULL);
+
+		if(rc == -1 && errno == EINTR)
+			continue;
+
+		if(FD_ISSET(MPI_Control_socket, &readFDs))
+		{
+			// TODO: check if it said it's okay to quit
+		}
+	}
+
+	// close ppexec socket
+	close(MPI_Control_socket);
+
 	return 0;
 }
 

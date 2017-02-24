@@ -16,6 +16,8 @@
 #define MAX_PORT 4599
 #define DEFAULT_BACKLOG 5
 #define SELECT_TIMEOUT 1
+#define CONNECT_FLAG 1
+#define QUIT_FLAG 2
 
 typedef struct
 {
