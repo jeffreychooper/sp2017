@@ -21,6 +21,7 @@ static char *MPI_Control_host;
 static int MPI_Control_port;
 static char MPI_My_host[HOSTNAME_LENGTH];
 static int MPI_My_listen_port;
+int *MPI_Rank_sockets;
 
 static int MPI_Control_socket;
 static int MPI_My_accept_socket;
@@ -35,6 +36,14 @@ int MPI_Init(int *argc, char ***argv)
 	// get rank, size, host, port from environment
 	MPI_World_rank = atoi(getenv("PP_MPI_RANK"));
 	MPI_World_size = atoi(getenv("PP_MPI_SIZE"));
+
+	// get space for connections to others in comm_world
+	MPI_Rank_sockets = malloc(MPI_World_size * sizeof(int));
+
+	for(int i = 0; i < MPI_World_size; i++)
+	{
+		MPI_Rank_sockets[i] = -1;
+	}
 
 	char *p;
 	char *tempString = malloc((strlen(getenv("PP_MPI_HOST_PORT")) + 1) * sizeof(char));
@@ -206,6 +215,23 @@ int MPI_Comm_size(MPI_Comm comm, int *size)
 
 int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm)
 {
+	// validate args
+	if(dest >= MPI_World_size)
+		return MPI_ERR_RANK;
+
+	// if(comm != MPI_COMMWORLD)
+		// check if it's valid
+
+	if(tag < 0)
+		return MPI_ERR_TAG;
+
+	// if no connection to the destination...
+
+		// get dest's listen port from ppexec
+		// connect to dest
+	
+	// send message (only int/char now)... I can probably just send it off
+
 	return MPI_SUCCESS;
 }
 
