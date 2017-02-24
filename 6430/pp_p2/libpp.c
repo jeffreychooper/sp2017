@@ -13,6 +13,7 @@
 #define HOSTNAME_LENGTH 1024
 #define DEFAULT_BACKLOG 5
 #define QUIT_FLAG 2
+#define BARRIER_FLAG 3
 
 static int MPI_World_rank;
 static int MPI_World_size;
@@ -148,6 +149,42 @@ int MPI_Finalize(void)
 
 int MPI_Barrier(MPI_Comm comm)
 {
+	// tell ppexec I want to join a barrier
+	int barrierFlag = BARRIER_FLAG;
+	write(MPI_Control_socket, (void *)&barrierFlag, sizeof(int));
+
+	// tell ppexec the communicator I'm a part of
+	write(MPI_Control_socket, (void *)&comm, sizeof(MPI_Comm));
+
+	// select on ppexec unit it says we can go
+	int rc;
+	fd_set readFDs;
+	int fdSetSize = MPI_Control_socket + 1;
+
+	while(1)
+	{
+		FD_ZERO(&readFDs);
+
+		FD_SET(MPI_Control_socket, &readFDs);
+
+		rc = select(fdSetSize, &readFDs, NULL, NULL, NULL);
+
+		if(rc == -1 && errno == EINTR)
+			continue;
+
+		if(FD_ISSET(MPI_Control_socket, &readFDs))
+		{
+			int reply;
+
+			read(MPI_Control_socket, (void *)&reply, sizeof(int));
+
+			if(reply == BARRIER_FLAG)
+			{
+				break;
+			}
+		}
+	}
+
 	return MPI_SUCCESS;
 }
 

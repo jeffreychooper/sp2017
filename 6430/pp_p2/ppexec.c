@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/tcp.h>
+#include "mpi.h"
 
 #define HOSTNAME_LENGTH 1024
 #define CWD_LENGTH 1024
@@ -18,6 +19,7 @@
 #define SELECT_TIMEOUT 1
 #define CONNECT_FLAG 1
 #define QUIT_FLAG 2
+#define BARRIER_FLAG 3
 
 typedef struct
 {
@@ -237,6 +239,7 @@ int main(int argc, char *argv[])
 	fd_set readFDs;
 	struct timeval tv;
 	int fdSetSize = 0;
+	int worldProcessesInBarrier = 0;
 
 	tv.tv_sec = SELECT_TIMEOUT;
 
@@ -306,6 +309,27 @@ int main(int argc, char *argv[])
 
 						done = 1;
 						break;
+					}
+				}
+				else if(requestFlag == BARRIER_FLAG)
+				{
+					// get the request communicator
+					MPI_Comm barrierComm;
+					read(ranks[i].controlSocket, (void *)&barrierComm, sizeof(MPI_Comm));
+
+					if(barrierComm == MPI_COMM_WORLD)
+					{
+						worldProcessesInBarrier++;
+
+						if(worldProcessesInBarrier >= numRanks)
+						{
+							for(int i = 0; i < numRanks; i++)
+							{
+								int replyFlag = BARRIER_FLAG;
+
+								write(ranks[i].controlSocket, (void *)&replyFlag, sizeof(int));
+							}
+						}
 					}
 				}
 			}
