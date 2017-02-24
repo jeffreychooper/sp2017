@@ -283,7 +283,31 @@ int main(int argc, char *argv[])
 
 			if(rankSocket != 0 && FD_ISSET(rankSocket, &readFDs))
 			{
-				// TODO: handle requests from children
+				int requestFlag;
+
+				read(rankSocket, (void *)&requestFlag, sizeof(int));
+
+				if(requestFlag == CONNECT_FLAG)
+				{
+					// TODO: handle a child wanting to connect to another rank
+				}
+				else if(requestFlag == QUIT_FLAG)
+				{
+					processesDone++;
+
+					if(processesDone >= numRanks)
+					{
+						for(int i = 0; i < numRanks; i++)
+						{
+							int replyFlag = QUIT_FLAG;
+
+							write(ranks[i].controlSocket, (void *)&replyFlag, sizeof(int));
+						}
+
+						done = 1;
+						break;
+					}
+				}
 			}
 		}
 

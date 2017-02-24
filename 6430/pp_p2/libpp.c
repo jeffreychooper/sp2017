@@ -120,7 +120,7 @@ int MPI_Finalize(void)
 	{
 		FD_ZERO(&readFDs);
 
-		FD_SET(MPI_Control_socket);
+		FD_SET(MPI_Control_socket, &readFDs);
 
 		rc = select(fdSetSize, &readFDs, NULL, NULL, NULL);
 
@@ -129,7 +129,14 @@ int MPI_Finalize(void)
 
 		if(FD_ISSET(MPI_Control_socket, &readFDs))
 		{
-			// TODO: check if it said it's okay to quit
+			int reply;
+
+			read(MPI_Control_socket, (void *)&reply, sizeof(int));
+
+			if(reply == QUIT_FLAG)
+			{
+				break;
+			}
 		}
 	}
 

@@ -11,5 +11,7 @@ int main(int argc, char *argv[])
 
     rc = MPI_Init(NULL,NULL);
 
+	rc = MPI_Finalize();
+
 	return 0;
 }
