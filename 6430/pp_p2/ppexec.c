@@ -20,7 +20,7 @@
 typedef struct
 {
 	int globalRank;
-	char *host;
+	char host[HOSTNAME_LENGTH];
 	int port;
 	int controlSocket;
 } RankInfo;
@@ -176,7 +176,7 @@ int main(int argc, char *argv[])
 		// no hosts specified... run locally
 		for(int i = 0; i < numRanks; i++)
 		{
-			ranks[i].host = mainHostname;
+			memcpy(&ranks[i].host, mainHostname, HOSTNAME_LENGTH);
 			ranks[i].globalRank = i;
 			ranks[i].controlSocket = 0;
 			ranks[i].port = 0;
@@ -199,7 +199,7 @@ int main(int argc, char *argv[])
 	{
 		for(int i = 0; i < numRanks; i++)
 		{
-			ranks[i].host = hostnames[i % numHosts];
+			memcpy(&ranks[i].host, hostnames[i % numHosts], HOSTNAME_LENGTH);
 			ranks[i].globalRank = i;
 			ranks[i].controlSocket = 0;
 			ranks[i].port = 0;
@@ -297,9 +297,7 @@ int main(int argc, char *argv[])
 			int hostLength;
 			read(newSocketFD, (void *)&hostLength, sizeof(int));
 
-			ranks[newSocketRank].host = malloc((hostLength + 1) * sizeof(char));	// TODO: free this at the very end
 			read(newSocketFD, (void *)&ranks[newSocketRank].host, hostLength);
-			ranks[newSocketRank].host[hostLength] = '\0';
 
 			read(newSocketFD, (void *)&ranks[newSocketRank].port, sizeof(int));
 		}
