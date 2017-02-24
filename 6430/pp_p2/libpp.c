@@ -211,6 +211,8 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI
 
 int MPI_Ssend(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm)
 {
+	MPI_Send(buf, count, datatype, dest, tag, comm);
+
 	return MPI_SUCCESS;
 }
 
