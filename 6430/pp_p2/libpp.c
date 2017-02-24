@@ -226,9 +226,11 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI
 		return MPI_ERR_TAG;
 
 	// if no connection to the destination...
-
+	if(MPI_Rank_sockets[dest])
+	{
 		// get dest's listen port from ppexec
 		// connect to dest
+	}
 	
 	// send message (only int/char now)... I can probably just send it off
 
