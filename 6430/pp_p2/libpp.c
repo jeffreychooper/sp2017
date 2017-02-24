@@ -143,37 +143,43 @@ int MPI_Finalize(void)
 	// close ppexec socket
 	close(MPI_Control_socket);
 
-	return 0;
+	return MPI_SUCCESS;
 }
 
 int MPI_Barrier(MPI_Comm comm)
 {
-	return 0;
+	return MPI_SUCCESS;
 }
 
 int MPI_Comm_rank(MPI_Comm comm, int *rank)
 {
-	return 0;
+	if(comm == MPI_COMM_WORLD)
+		*rank = MPI_World_rank;
+
+	return MPI_SUCCESS;
 }
 
 int MPI_Comm_size(MPI_Comm comm, int *size)
 {
-	return 0;
+	if(comm == MPI_COMM_WORLD)
+		*size = MPI_World_size;
+
+	return MPI_SUCCESS;
 }
 
 int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm)
 {
-	return 0;
+	return MPI_SUCCESS;
 }
 
 int MPI_Ssend(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm)
 {
-	return 0;
+	return MPI_SUCCESS;
 }
 
 int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm, MPI_Status *status)
 {
-	return 0;
+	return MPI_SUCCESS;
 }
 
 void ErrorCheck(int val, char *str)
