@@ -11,6 +11,8 @@
 #include <netinet/tcp.h>
 
 #define HOSTNAME_LENGTH 1024
+#define MIN_PORT 4500
+#define MAX_PORT 4599
 #define DEFAULT_BACKLOG 5
 #define CONNECT_FLAG 1
 #define QUIT_FLAG 2
@@ -71,7 +73,7 @@ int MPI_Init(int *argc, char ***argv)
 	socklen_t sinLength = sizeof(sin);
 	rc = getsockname(MPI_My_accept_socket, (struct sockaddr *)&sin, &sinLength);
 	ErrorCheck(rc, "MPI_Init getsockname");
-	MPI_My_listen_port = sin.sin_port;
+	MPI_My_listen_port = ntohs(sin.sin_port);
 
 	// connect to ppexec
 	struct sockaddr_in listener;
@@ -252,7 +254,7 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI
 		read(MPI_Control_socket, (void *)&destHost, HOSTNAME_LENGTH * sizeof(char));
 		read(MPI_Control_socket, (void *)&destPort, sizeof(int));
 
-		printf("got %s:%d from ppexec\n", destHost, destPort);
+		printf("%s:%d\n", destHost, destPort);
 
 		// connect to dest
 		struct sockaddr_in listener;
@@ -334,10 +336,9 @@ int SetupAcceptSocket()
 	sin.sin_family = AF_INET;
 	sin.sin_addr.s_addr = INADDR_ANY;
 
-	sin.sin_port = 0;		// okay with any port
+	sin.sin_port = 0;
 
 	rc = bind(acceptSocket, (struct sockaddr *)&sin, sizeof(sin));
-
 	ErrorCheck(rc, "SetupAcceptSocket bind");
 
 	rc = listen(acceptSocket, DEFAULT_BACKLOG);
@@ -404,8 +405,6 @@ void ProgressEngine(int blockingSocket)
 				read(newSocket, (void *)&newSocketRank, sizeof(int));
 
 				MPI_Rank_sockets[newSocketRank] = newSocket;
-
-				printf("New socket connection: %d", newSocketRank);
 
 				if(MPI_My_accept_socket == blockingSocket)
 					break;
