@@ -12,9 +12,9 @@
 
 #define HOSTNAME_LENGTH 1024
 #define DEFAULT_BACKLOG 5
+#define CONNECT_FLAG 1
 #define QUIT_FLAG 2
 #define BARRIER_FLAG 3
-#define CONNECT_FLAG 4
 
 int MPI_World_rank;
 int MPI_World_size;
@@ -107,6 +107,8 @@ int MPI_Init(int *argc, char ***argv)
 	write(MPI_Control_socket, (void *)&MPI_My_host, myHostLength);
 
 	write(MPI_Control_socket, (void *)&MPI_My_listen_port, sizeof(int));
+
+	printf("rank: %d host: %s port: %d\n", MPI_World_rank, MPI_My_host, MPI_My_listen_port);
 
 	return MPI_SUCCESS;
 }
@@ -238,6 +240,7 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI
 
 		// tell ppexec which comm I'm talking about
 		write(MPI_Control_socket, (void *)&comm, sizeof(int));
+
 		
 		// tell ppexec which rank I want to connect to
 		write(MPI_Control_socket, (void *)&dest, sizeof(int));
@@ -248,6 +251,8 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI
 
 		read(MPI_Control_socket, (void *)&destHost, HOSTNAME_LENGTH * sizeof(char));
 		read(MPI_Control_socket, (void *)&destPort, sizeof(int));
+
+		printf("got %s:%d from ppexec\n", destHost, destPort);
 
 		// connect to dest
 		struct sockaddr_in listener;
@@ -348,7 +353,7 @@ void ProgressEngine(int blockingSocket)
 	fd_set readFDs;
 	int fdSetSize = 0;
 
-	while(blockingSocket != -1)
+	while(1)
 	{
 		FD_ZERO(&readFDs);
 

@@ -287,7 +287,53 @@ int main(int argc, char *argv[])
 
 				if(requestFlag == CONNECT_FLAG)
 				{
-					
+					int requestedComm;
+					int requestedRank;
+
+					read(rankSocket, (void *)&requestedComm, sizeof(int));
+
+					if(requestedComm == MPI_COMM_WORLD)
+					{
+						read(rankSocket, (void *)&requestedRank, sizeof(int));
+
+						// it's possible the other rank wasn't ready... make sure we get its info
+						while(ranks[requestedRank].port == 0)
+						{
+							int tempRC;
+							fd_set tempReadFDs;
+							int tempFDSetSize;
+
+							FD_ZERO(&tempReadFDs);
+
+							FD_SET(acceptSocket, &tempReadFDs);
+
+							tempFDSetSize = acceptSocket + 1;
+
+							tempRC = select(tempFDSetSize, &tempReadFDs, NULL, NULL, NULL);
+
+							if(tempRC == -1 && errno == EINTR)
+								continue;
+
+							if(FD_ISSET(acceptSocket, &tempReadFDs))
+							{
+								int newSocketFD = AcceptConnection(acceptSocket);
+
+								int newSocketRank;
+								read(newSocketFD, (void *)&newSocketRank, sizeof(int));
+								ranks[newSocketRank].controlSocket = newSocketFD;
+
+								int hostLength;
+								read(newSocketFD, (void *)&hostLength, sizeof(int));
+
+								read(newSocketFD, (void *)&ranks[newSocketRank].host, hostLength);
+
+								read(newSocketFD, (void *)&ranks[newSocketRank].port, sizeof(int));
+							}
+						}
+
+						write(rankSocket, (void *)(ranks[requestedRank].host), HOSTNAME_LENGTH * sizeof(char));
+						write(rankSocket, (void *)&(ranks[requestedRank].port), sizeof(int));
+					}
 				}
 				else if(requestFlag == QUIT_FLAG)
 				{
