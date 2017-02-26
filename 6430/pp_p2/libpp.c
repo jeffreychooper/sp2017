@@ -29,6 +29,7 @@ int *MPI_Rank_sockets;
 
 void ErrorCheck(int val, char *str);
 int SetupAcceptSocket();
+void ProgressEngine(int blockingSocket);	// sometimes, we'll want to block on some certain socket... so we'll select on it in particular
 
 int MPI_Init(int *argc, char ***argv)
 {
@@ -295,6 +296,13 @@ int MPI_Ssend(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MP
 
 int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm, MPI_Status *status)
 {
+	// if we don't have a connection yet, do the progress engine (which will do the accept socket work)
+	if(source != MPI_ANY_SOURCE)
+	{
+		while(MPI_Rank_sockets[source] == -1)
+			ProgressEngine(MPI_My_accept_socket);
+	}
+
 	return MPI_SUCCESS;
 }
 
@@ -331,4 +339,76 @@ int SetupAcceptSocket()
 	ErrorCheck(rc, "SetupAcceptSocket listen");
 
 	return acceptSocket;
+}
+
+void ProgressEngine(int blockingSocket)
+{
+	// select on the accept socket (one day, this will also probably select on some array of nonblocking receiving sockets)
+	int rc;
+	fd_set readFDs;
+	int fdSetSize = 0;
+
+	while(blockingSocket != -1)
+	{
+		FD_ZERO(&readFDs);
+
+		FD_SET(MPI_My_accept_socket, &readFDs);
+
+		if(MPI_My_accept_socket > fdSetSize)
+			fdSetSize = MPI_My_accept_socket;
+
+		fdSetSize++;
+
+		// waiting on some socket in particular
+		if(blockingSocket != -1)
+		{
+			rc = select(fdSetSize, &readFDs, NULL, NULL, NULL);
+
+			if(rc == -1 && errno == EINTR)
+				continue;
+
+			if(FD_ISSET(MPI_My_accept_socket, &readFDs))
+			{
+				// handle accepting the new connection
+				int newSocket;
+				struct sockaddr_in from;
+				socklen_t fromLen = sizeof(from);
+
+				int success = 0;
+
+				while(!success)
+				{
+					newSocket = accept(MPI_My_accept_socket, (struct sockaddr *)&from, &fromLen);
+
+					if(newSocket == -1)
+					{
+						if(errno == EINTR)
+							continue;
+
+						ErrorCheck(newSocket, "ProgressEngine accept");
+					}
+					else
+						success = 1;
+				}
+
+				int optVal = 1;
+				setsockopt(newSocket, IPPROTO_TCP, TCP_NODELAY, (char *)&optVal, sizeof(optVal));
+
+				// get the global rank of the newly connected friend
+				int newSocketRank;
+				read(newSocket, (void *)&newSocketRank, sizeof(int));
+
+				MPI_Rank_sockets[newSocketRank] = newSocket;
+
+				printf("New socket connection: %d", newSocketRank);
+
+				if(MPI_My_accept_socket == blockingSocket)
+					break;
+			}
+		}
+		else
+		{
+
+		}
+	}
 }

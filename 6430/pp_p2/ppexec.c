@@ -287,7 +287,7 @@ int main(int argc, char *argv[])
 
 				if(requestFlag == CONNECT_FLAG)
 				{
-					// TODO: handle a child wanting to connect to another rank
+					
 				}
 				else if(requestFlag == QUIT_FLAG)
 				{
