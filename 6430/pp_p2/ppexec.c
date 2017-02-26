@@ -20,7 +20,6 @@
 #define CONNECT_FLAG 1
 #define QUIT_FLAG 2
 #define BARRIER_FLAG 3
-#define CONNECT_FLAG 4
 
 typedef struct
 {
@@ -236,17 +235,12 @@ int main(int argc, char *argv[])
 	int pid;
 	int processesDone = 0;
 	int done = 0;
-	int connectionMatrix[numRanks][numRanks];
 	fd_set readFDs;
 	struct timeval tv;
 	int fdSetSize = 0;
 	int worldProcessesInBarrier = 0;
 
 	tv.tv_sec = SELECT_TIMEOUT;
-
-	for(int i = 0; i < numRanks; i++)
-		for(int j = 0; j < numRanks; j++)
-			connectionMatrix[i][j] = 0;
 
 	while(!done)
 	{

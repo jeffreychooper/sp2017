@@ -16,15 +16,15 @@
 #define BARRIER_FLAG 3
 #define CONNECT_FLAG 4
 
-static int MPI_World_rank;
-static int MPI_World_size;
-static char *MPI_Control_host;
-static int MPI_Control_port;
-static char MPI_My_host[HOSTNAME_LENGTH];
-static int MPI_My_listen_port;
+int MPI_World_rank;
+int MPI_World_size;
+char *MPI_Control_host;
+int MPI_Control_port;
+char MPI_My_host[HOSTNAME_LENGTH];
+int MPI_My_listen_port;
 
-static int MPI_Control_socket;
-static int MPI_My_accept_socket;
+int MPI_Control_socket;
+int MPI_My_accept_socket;
 int *MPI_Rank_sockets;
 
 void ErrorCheck(int val, char *str);
@@ -216,6 +216,8 @@ int MPI_Comm_size(MPI_Comm comm, int *size)
 
 int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm)
 {
+	int rc;
+
 	// validate args
 	if(dest >= MPI_World_size)
 		return MPI_ERR_RANK;
@@ -246,10 +248,40 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI
 		read(MPI_Control_socket, (void *)&destHost, HOSTNAME_LENGTH * sizeof(char));
 		read(MPI_Control_socket, (void *)&destPort, sizeof(int));
 
-		// TODO: connect to dest
+		// connect to dest
+		struct sockaddr_in listener;
+		struct hostent *hp;
+		int optVal = 1;
+
+		hp = gethostbyname((char *)&destHost);
+
+		if(!hp)
+		{
+			printf("%s : %s\n", "MPI_Send gethostbyname", strerror(errno));
+			exit(1);
+		}
+
+		memset((void *)&listener, '0', sizeof(listener));
+		memcpy((void *)&listener.sin_addr, (void *)hp->h_addr, hp->h_length);
+		listener.sin_family = hp->h_addrtype;
+		listener.sin_port = htons(destPort);
+
+		MPI_Rank_sockets[dest] = socket(AF_INET, SOCK_STREAM, 0);
+		ErrorCheck(MPI_Rank_sockets[dest], "MPI_Send socket");
+
+		setsockopt(MPI_Rank_sockets[dest], IPPROTO_TCP, TCP_NODELAY, (char *)&optVal, sizeof(optVal));
+
+		rc = connect(MPI_Rank_sockets[dest], (struct sockaddr *)&listener, sizeof(listener));
+		ErrorCheck(rc, "MPI_Send connect");
+
+		// tell the dest which global rank I am
+		write(MPI_Rank_sockets[dest], (void *)&MPI_World_rank, sizeof(int));
 	}
 	
-	// send message (only int/char now)... I can probably just send it off
+	// send dest a message to let it know what we want to send
+
+	// while not sent
+		// progress engine (which will wait for a message from the dest saying it's ready, then send it off)
 
 	return MPI_SUCCESS;
 }
