@@ -1,0 +1,32 @@
+# config info must come first (comments begin with a #)
+vs  s1  1   # defines the "1" network
+            # a switch is basically just a cable that fwds ethernet packets)
+            # switches know macaddrs but not IPaddrs
+vs  s2  2   # defines the "2" network
+vh  h1  101 1.1           # name, mac-ip pairs (all macs 100+)
+vr  r1  102 1.2  103 2.1  # router AND host (will have IP addrs)
+                          # name, mac-ip pairs (up to 6 pairs total)
+vh  h2  104 2.2           # name, mac-ip pairs (all macs 100+)
+
+# operations using the nets can only be performed after all config is done
+prt hello world    # only executed by the interpreter - for debugging
+                   # no args means print a blank line
+prt
+macsend hello_from_h1 101 102   # will be forwarded by vs 1
+#### pause tty    # prints "press return to continue"
+pause 2      # pauses are impt to give the nodes time to "settle out"
+prt 
+
+macsend howdy_from_r1 103 104   # will be forwarded by vs 2
+pause 2      # prints nothing
+prt 
+
+macsend badsend 101 104  # fails - not on same net
+pause 2
+prt 
+
+#### pause tty    # prints "press return to continue"
+macsend bcastmsg_from_h1 101 255  # 255 (all 1's in a byte) implies bcast
+                                  # (handled by switch; goes to from_host also)
+                                  # 255 bcast could be used for ARP-like stuff
+pause 2    # make sure all is done before stopping
