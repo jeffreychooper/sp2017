@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/wait.h>
+#include <ctype.h>
 
 #define NAME_LENGTH 64
 #define MAX_LINE_LENGTH 896
@@ -115,7 +116,7 @@ int main(int argc, char *argv[])
 		if(p = (strchr(line, '#')))
 			*p = '\0';
 
-		if(!configDone && line[0] != 'v')
+		if(!configDone && line[0] != 'v' && line[0] != '\0' && !isspace(line[0]))
 		{
 			configDone = 1; 
 			lineCount = 0;
