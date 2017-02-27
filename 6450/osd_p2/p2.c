@@ -500,8 +500,8 @@ int main(int argc, char *argv[])
 		{
 			if(strcmp(operations[operationsIndex][1], "tty") == 0)
 			{
-				puts("press return to continue");
-				getchar();
+				printf("press return to continue\n");
+			 	getchar();
 			}
 			else
 			{
@@ -543,10 +543,10 @@ int main(int argc, char *argv[])
 						int messageLength = strlen(operations[operationsIndex][1]);
 						strncpy(buffer, operations[operationsIndex][1], messageLength);
 
-						int bytesWritten = write(routerInterface, (void *)&charBuffer, 100);
+						int bytesWritten = write(routerInterface, (void *)&buffer, 100);
 
 						while(bytesWritten < 100)
-							bytesWritten += write(routerInterface, (void *)&charBuffer + bytesWritten, 100 - bytesWritten);
+							bytesWritten += write(routerInterface, (void *)&buffer + bytesWritten, 100 - bytesWritten);
 
 						sent = 1;
 						break;
@@ -589,10 +589,10 @@ int main(int argc, char *argv[])
 						int messageLength = strlen(operations[operationsIndex][1]);
 						strncpy(buffer, operations[operationsIndex][1], messageLength);
 
-						int bytesWritten = write(hostInterface, (void *)&charBuffer, 100);
+						int bytesWritten = write(hostInterface, (void *)&buffer, 100);
 
 						while(bytesWritten < 100)
-							bytesWritten += write(hostInterface, (void *)&charBuffer + bytesWritten, 100 - bytesWritten);
+							bytesWritten += write(hostInterface, (void *)&buffer + bytesWritten, 100 - bytesWritten);
 
 						sent = 1;
 						break;
@@ -770,6 +770,12 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 
 void ActAsRouter(RouterInfo *routerInfo)
 {
+	#if DEBUG
+	int debug = 1;
+	while(debug)
+		;
+	#endif
+
 	int done = 0;
 	int doneWithInterface[6] = { 0 };
 	int rc;
@@ -901,6 +907,12 @@ void ActAsRouter(RouterInfo *routerInfo)
 
 void ActAsHost(HostInfo *hostInfo)
 {
+	#if DEBUG
+	int debug = 1;
+	while(debug)
+		;
+	#endif
+
 	int done = 0;
 	int doneWithInterface = 0;
 	int rc;
@@ -963,9 +975,9 @@ void ActAsHost(HostInfo *hostInfo)
 			}
 			else if(buffer[0] == 2)
 			{
-				char receiver[1];
-				char sender[1];
-				char message[100];
+				unsigned char receiver[1];
+				unsigned char sender[1];
+				unsigned char message[100];
 
 				read(hostInfo->interpreterFD, (void *)&receiver, 1);
 				read(hostInfo->interpreterFD, (void *)&sender, 1);
