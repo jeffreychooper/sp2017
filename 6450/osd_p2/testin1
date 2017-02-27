@@ -6,9 +6,10 @@ vh	h2	104	2.2
 
 prt hello world
 macsend hello_from_h1 101 102
-pause 3
+pause 2
 macsend howdy_from_h2 103 104
-pause 3
+pause 2
 macsend badsend 101 104		# FAILS
-pause 3
+pause 2
 macsend bcastmsg_from_h1 101 255
+pause 2
