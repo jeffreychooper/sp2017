@@ -904,9 +904,18 @@ void ActAsRouter(RouterInfo *routerInfo)
 														  4 + strlen(message),
 														  message);
 
-				char *payload = GetPayload(packetToSend);
-				printf("%s: macsend to %s on %d: %s\n", routerInfo->name, "temp", (int)sender[0], payload);
-				free(payload);
+				if(receiver[0] != 255)
+				{
+					char *payload = GetPayload(packetToSend);
+					printf("%s: macsend to %s on %d: %s\n", routerInfo->name, "temp", (int)sender[0], payload);
+					free(payload);
+				}
+				else
+				{
+					char *payload = GetPayload(packetToSend);
+					printf("%s: macsend bcast on %d: %s\n", routerInfo->name, (int)sender[0], payload);
+					free(payload);
+				}
 
 				int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
 
@@ -1008,9 +1017,18 @@ void ActAsHost(HostInfo *hostInfo)
 														  4 + strlen(message),
 														  message);
 
-				char *payload = GetPayload(packetToSend);
-				printf("%s: macsend to %s on %d: %s\n", hostInfo->name, "temp", (int)sender[0], payload);
-				free(payload);
+				if(receiver[0] != 255)
+				{
+					char *payload = GetPayload(packetToSend);
+					printf("%s: macsend to %s on %d: %s\n", hostInfo->name, "temp", (int)sender[0], payload);
+					free(payload);
+				}
+				else
+				{
+					char *payload = GetPayload(packetToSend);
+					printf("%s: macsend bcast on %d: %s\n", hostInfo->name, (int)sender[0], payload);
+					free(payload);
+				}
 
 				int bytesWritten = write(hostInfo->interface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
 
