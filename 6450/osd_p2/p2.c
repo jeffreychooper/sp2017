@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <sys/wait.h>
 
+#define NAME_LENGTH 64
 #define MAX_LINE_LENGTH 896
 #define CONFIG_MAX_SIZE 42
 #define OPERATIONS_START_ELEMENTS 20
@@ -20,10 +21,12 @@
 #define MAX_TOKEN_LENGTH 64
 #define EXTRA_OPERATIONS 10
 #define MAX_ETHERNET_PACKET_SIZE 104
+#define PAYLOAD_SIZE 100
 
 // switch information
 typedef struct {
 
+char *name;
 unsigned char netNumber;
 unsigned char knownMACs[6];
 int interfaces[6];
@@ -34,6 +37,7 @@ int interpreterFD;
 // router information
 typedef struct {
 
+char *name;
 unsigned char MACs[6];
 unsigned char netIPs[6];
 unsigned char hostIPs[6];
@@ -45,6 +49,7 @@ int interpreterFD;
 // host information
 typedef struct {
 
+char *name;
 unsigned char MAC;
 unsigned char netIP;
 unsigned char hostIP;
@@ -59,9 +64,12 @@ void ActAsRouter(RouterInfo *routerInfo);
 void ActAsHost(HostInfo *hostInfo);
 unsigned char *CreateEthernetPacket(unsigned char destMAC, unsigned char srcMAC, unsigned char type, unsigned char length, char *payload);
 int GetEthernetPacketDestMAC(unsigned char *packet);
+char *GetPayload(char *packet);
 
 int main(int argc, char *argv[])
 {
+	setbuf(stdout, NULL);
+
 	// interpret the file given by the user
 	if(argc < 2)
 	{
@@ -202,10 +210,16 @@ int main(int argc, char *argv[])
 		switch(config[i][0][1])
 		{
 			case 's':
+				// TODO: free
+				switches[numSwitches].name = malloc(NAME_LENGTH * sizeof(char));
+				strcpy(switches[numSwitches].name, config[i][1]);
 				switches[numSwitches].netNumber = (unsigned char)atoi(config[i][2]);
 				numSwitches++;
 				break;
 			case 'r':
+				// TODO: free
+				routers[numRouters].name = malloc(NAME_LENGTH * sizeof(char));
+				strcpy(routers[numRouters].name, config[i][1]);
 				for(int j = 2; config[i][j][0] != 0; j += 2)
 				{
 					routers[numRouters].MACs[(j - 2) / 2] = (unsigned char)atoi(config[i][j]);
@@ -221,6 +235,9 @@ int main(int argc, char *argv[])
 				numRouters++;
 				break;
 			case 'h':
+				// TODO: free
+				hosts[numHosts].name = malloc(NAME_LENGTH * sizeof(char));
+				strcpy(hosts[numHosts].name, config[i][1]);
 				hosts[numHosts].MAC = (unsigned char)atoi(config[i][2]);
 
 				if(p = strtok(config[i][3], "."))
@@ -730,8 +747,7 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 				}
 
 				if(!foundDest)
-					puts("discarded a packet for an unknown MAC");
-					// TODO: printf("Switch discarded packet for unknown MAC %d", GetEthernetPacketDestMAC(buffer));
+					printf("%s: discarded a packet for unknown macaddr %d\n", switchInfo->name, (int)GetEthernetPacketDestMAC(buffer));
 			}
 
 			interfaceIndex++;
@@ -813,8 +829,9 @@ void ActAsRouter(RouterInfo *routerInfo)
 				while(bytesRead < MAX_ETHERNET_PACKET_SIZE)
 					bytesRead += read(routerInfo->interfaces[interfaceIndex], (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
 
-				// TODO: print that I received a message
-				puts("router received a message");
+				char *payload = GetPayload((char *)buffer);
+				printf("%s: macsend from %s on %d: %s\n", routerInfo->name, "temp", (int)routerInfo->MACs[interfaceIndex], payload);
+				free(payload);
 			}
 
 			interfaceIndex++;
@@ -845,6 +862,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 				while(bytesRead < 100)
 					bytesRead += read(routerInfo->interpreterFD, (void *)&message + bytesRead, 100 - bytesRead);
 
+
 				// send the macsend
 				int interfaceIndex = 0;
 				int sendInterface;
@@ -865,6 +883,10 @@ void ActAsRouter(RouterInfo *routerInfo)
 														  (unsigned char)0,
 														  4 + strlen(message),
 														  message);
+
+				char *payload = GetPayload(packetToSend);
+				printf("%s: macsend to %s on %d: %s\n", routerInfo->name, "temp", (int)sender[0], payload);
+				free(payload);
 
 				int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
 
@@ -918,8 +940,9 @@ void ActAsHost(HostInfo *hostInfo)
 				while(bytesRead < MAX_ETHERNET_PACKET_SIZE)
 					bytesRead += read(hostInfo->interface, (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
 
-					// TODO: print that I received a message
-					puts("host received a message");
+					char *payload = GetPayload((char *)buffer);
+					printf("%s: macsend from %s on %d: %s\n", hostInfo->name, "temp", (int)hostInfo->MAC, payload);
+					free(payload);
 			}
 			else
 			{
@@ -959,6 +982,10 @@ void ActAsHost(HostInfo *hostInfo)
 														  4 + strlen(message),
 														  message);
 
+				char *payload = GetPayload(packetToSend);
+				printf("%s: macsend to %s on %d: %s\n", hostInfo->name, "temp", (int)sender[0], payload);
+				free(payload);
+
 				int bytesWritten = write(hostInfo->interface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
 
 				while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
@@ -990,4 +1017,14 @@ int GetEthernetPacketDestMAC(unsigned char *packet)
 	int returnValue = packet[0];
 
 	return returnValue;
+}
+
+// TODO: free the memory returned by this
+char *GetPayload(char *packet)
+{
+	char *payload = calloc(PAYLOAD_SIZE, sizeof(char));
+
+	strncpy(payload, packet + 4, 100);
+
+	return payload;
 }
