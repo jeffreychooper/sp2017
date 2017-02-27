@@ -647,6 +647,12 @@ void FreeOperationsMemory(char ***operations, int currMaxOperations)
 
 void ActAsSwitch(SwitchInfo *switchInfo)
 {
+	#if DEBUG
+	int debug = 1;
+	while(debug)
+		;
+	#endif
+
 	int done = 0;
 	int doneWithInterface[6] = { 0 };
 	int rc;
