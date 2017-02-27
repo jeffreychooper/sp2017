@@ -1,0 +1,19 @@
+vs s1 1
+vs s2 2
+vh h1 101 1.1
+vr r1 102 1.2 103 2.1
+vh h2 104 2.2
+
+prt hello world
+prt
+macsend hello_from_h1 101 102
+pause 2
+prt
+macsend howdy_from_r1 103 104
+pause 2
+prt
+macsend badsend 101 104
+pause 2
+prt
+macsend bcastmsg_from_h1 101 255
+pause 2

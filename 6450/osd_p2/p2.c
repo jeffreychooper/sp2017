@@ -329,6 +329,8 @@ int main(int argc, char *argv[])
 
 		int forkRC = fork();
 
+		setbuf(stdout, NULL);
+
 		if(forkRC == 0)
 		{
 			for(int i = 3; i < fdsOpen; i++)
@@ -394,6 +396,8 @@ int main(int argc, char *argv[])
 
 		int forkRC = fork();
 
+		setbuf(stdout, NULL);
+
 		if(forkRC == 0)
 		{
 			for(int i = 3; i < fdsOpen; i++)
@@ -457,6 +461,8 @@ int main(int argc, char *argv[])
 		memcpy(tempHostInfo, &hosts[i], sizeof(HostInfo));
 
 		int forkRC = fork();
+
+		setbuf(stdout, NULL);
 
 		if(forkRC == 0)
 		{
@@ -597,6 +603,8 @@ int main(int argc, char *argv[])
 						sent = 1;
 						break;
 					}
+					
+					index++;
 				}
 			}
 		}
