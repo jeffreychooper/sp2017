@@ -65,6 +65,7 @@ void ActAsRouter(RouterInfo *routerInfo);
 void ActAsHost(HostInfo *hostInfo);
 unsigned char *CreateEthernetPacket(unsigned char destMAC, unsigned char srcMAC, unsigned char type, unsigned char length, char *payload);
 int GetEthernetPacketDestMAC(unsigned char *packet);
+int GetEthernetPacketSourceMAC(unsigned char *packet);
 char *GetPayload(char *packet);
 
 int main(int argc, char *argv[])
@@ -851,7 +852,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 					bytesRead += read(routerInfo->interfaces[interfaceIndex], (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
 
 				char *payload = GetPayload((char *)buffer);
-				printf("%s: macsend from %s on %d: %s\n", routerInfo->name, "temp", (int)routerInfo->MACs[interfaceIndex], payload);
+				printf("%s: macsend from %d on %d: %s\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), (int)routerInfo->MACs[interfaceIndex], payload);
 				free(payload);
 			}
 
@@ -908,7 +909,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 				if(receiver[0] != 255)
 				{
 					char *payload = GetPayload(packetToSend);
-					printf("%s: macsend to %s on %d: %s\n", routerInfo->name, "temp", (int)sender[0], payload);
+					printf("%s: macsend to %d on %d: %s\n", routerInfo->name, GetEthernetPacketDestMAC(packetToSend), (int)sender[0], payload);
 					free(payload);
 				}
 				else
@@ -977,7 +978,7 @@ void ActAsHost(HostInfo *hostInfo)
 					bytesRead += read(hostInfo->interface, (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
 
 					char *payload = GetPayload((char *)buffer);
-					printf("%s: macsend from %s on %d: %s\n", hostInfo->name, "temp", (int)hostInfo->MAC, payload);
+					printf("%s: macsend from %d on %d: %s\n", hostInfo->name, GetEthernetPacketSourceMAC(buffer), (int)hostInfo->MAC, payload);
 					free(payload);
 			}
 			else
@@ -1021,7 +1022,7 @@ void ActAsHost(HostInfo *hostInfo)
 				if(receiver[0] != 255)
 				{
 					char *payload = GetPayload(packetToSend);
-					printf("%s: macsend to %s on %d: %s\n", hostInfo->name, "temp", (int)sender[0], payload);
+					printf("%s: macsend to %d on %d: %s\n", hostInfo->name, GetEthernetPacketDestMAC(packetToSend), (int)sender[0], payload);
 					free(payload);
 				}
 				else
@@ -1060,6 +1061,13 @@ unsigned char *CreateEthernetPacket(unsigned char destMAC, unsigned char srcMAC,
 int GetEthernetPacketDestMAC(unsigned char *packet)
 {
 	int returnValue = packet[0];
+
+	return returnValue;
+}
+
+int GetEthernetPacketSourceMAC(unsigned char *packet)
+{
+	int returnValue = packet[1];
 
 	return returnValue;
 }
