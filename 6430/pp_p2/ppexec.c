@@ -39,6 +39,8 @@ int listeningPort;		// the port that we're listening on
 
 int main(int argc, char *argv[])
 {
+	setbuf(stdout, NULL);
+
 	char *hostsfilePath = "hostnames";
 	int numRanks = 1;
 

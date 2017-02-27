@@ -1,3 +1,5 @@
+// TODO: need to adjust send and receive... make a linked list pointing to buffers where I store things to send and receive... works better with progress engine
+// TODO: progress engine might need to be expanded... get info from it about whether who sent us what message
 #include "mpi.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +19,8 @@
 #define CONNECT_FLAG 1
 #define QUIT_FLAG 2
 #define BARRIER_FLAG 3
+#define RECV_READY_FLAG 4
+#define SEND_FLAG 5
 
 int MPI_World_rank;
 int MPI_World_size;
@@ -31,10 +35,12 @@ int *MPI_Rank_sockets;
 
 void ErrorCheck(int val, char *str);
 int SetupAcceptSocket();
-void ProgressEngine(int blockingSocket);	// sometimes, we'll want to block on some certain socket... so we'll select on it in particular
+int ProgressEngine(int blockingSocket);		// sometimes, we'll want to block on some certain socket... so we'll select on it in particular. will return 0 when successful
 
 int MPI_Init(int *argc, char ***argv)
 {
+	setbuf(stdout, NULL);
+
 	int rc;
 
 	// get rank, size, host, port from environment
@@ -109,8 +115,6 @@ int MPI_Init(int *argc, char ***argv)
 	write(MPI_Control_socket, (void *)&MPI_My_host, myHostLength);
 
 	write(MPI_Control_socket, (void *)&MPI_My_listen_port, sizeof(int));
-
-	printf("rank: %d host: %s port: %d\n", MPI_World_rank, MPI_My_host, MPI_My_listen_port);
 
 	return MPI_SUCCESS;
 }
@@ -230,7 +234,7 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI
 	// if(comm != MPI_COMMWORLD)
 		// check if it's valid
 
-	if(tag < 0)
+	if(tag < 0 && tag != MPI_ANY_TAG)
 		return MPI_ERR_TAG;
 
 	// if no connection to the destination...
@@ -243,7 +247,6 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI
 		// tell ppexec which comm I'm talking about
 		write(MPI_Control_socket, (void *)&comm, sizeof(int));
 
-		
 		// tell ppexec which rank I want to connect to
 		write(MPI_Control_socket, (void *)&dest, sizeof(int));
 
@@ -253,8 +256,6 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI
 
 		read(MPI_Control_socket, (void *)&destHost, HOSTNAME_LENGTH * sizeof(char));
 		read(MPI_Control_socket, (void *)&destPort, sizeof(int));
-
-		printf("%s:%d\n", destHost, destPort);
 
 		// connect to dest
 		struct sockaddr_in listener;
@@ -285,11 +286,34 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI
 		// tell the dest which global rank I am
 		write(MPI_Rank_sockets[dest], (void *)&MPI_World_rank, sizeof(int));
 	}
-	
-	// send dest a message to let it know what we want to send
 
-	// while not sent
-		// progress engine (which will wait for a message from the dest saying it's ready, then send it off)
+	// tell dest we're sending
+	int sendFlag = SEND_FLAG;
+	write(MPI_Rank_sockets[dest], (void *)&sendFlag, sizeof(int));
+
+	// tell dest our rank
+	write(MPI_Rank_sockets[dest], (void *)&MPI_World_rank, sizeof(int));
+
+	// tell dest the tag we're using
+	write(MPI_Rank_sockets[dest], (void *)&tag, sizeof(int));
+
+	// returns 0 when it's ready
+	while(ProgressEngine(MPI_Rank_sockets[dest]))
+		;
+
+	int typeSize;
+
+	if(datatype == MPI_CHAR)
+		typeSize = sizeof(char);
+	else if(datatype == MPI_INT)
+		typeSize = sizeof(int);
+
+	int bytesToWrite = count * typeSize;
+
+	int bytesWritten = write(MPI_Rank_sockets[dest], buf, bytesToWrite);
+
+	while(bytesWritten < bytesToWrite)
+		bytesWritten += write(MPI_Rank_sockets[dest], buf + bytesWritten, bytesToWrite - bytesWritten);
 
 	return MPI_SUCCESS;
 }
@@ -303,11 +327,169 @@ int MPI_Ssend(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MP
 
 int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm, MPI_Status *status)
 {
-	// if we don't have a connection yet, do the progress engine (which will do the accept socket work)
+	status->count = count;
+
 	if(source != MPI_ANY_SOURCE)
 	{
+		// if we don't have a connection yet, do the progress engine (which will do the accept socket work)
 		while(MPI_Rank_sockets[source] == -1)
-			ProgressEngine(MPI_My_accept_socket);
+		{
+			// returns 0 when it gets something from the specified socket
+			while(ProgressEngine(MPI_My_accept_socket))
+				;
+		}
+
+		// read from the sender until it tells me the tag it's sending
+		int senderFlag;
+		while(senderFlag != SEND_FLAG)
+			read(MPI_Rank_sockets[source], (void *)&senderFlag, sizeof(int));
+
+		int senderSource;
+		read(MPI_Rank_sockets[source], (void *)&senderSource, sizeof(int));
+
+		int senderTag;
+		read(MPI_Rank_sockets[source], (void *)&senderTag, sizeof(int));
+
+		status->MPI_SOURCE = senderSource;
+		status->MPI_TAG = senderTag;
+
+		if(tag == MPI_ANY_TAG || senderTag == tag)
+		{
+			int readyFlag = RECV_READY_FLAG;
+			write(MPI_Rank_sockets[source], (void *)&readyFlag, sizeof(int));
+
+			int typeSize;
+
+			if(datatype == MPI_CHAR)
+				typeSize = sizeof(char);
+			else if(datatype == MPI_INT)
+				typeSize = sizeof(int);
+
+			int bytesToRead = count * typeSize;
+
+			int bytesRead = read(MPI_Rank_sockets[source], buf, bytesToRead);
+
+			while(bytesRead < bytesToRead)
+				bytesRead += read(MPI_Rank_sockets[source], buf + bytesRead, bytesToRead - bytesRead);
+		}
+		else
+		{
+			return MPI_ERR_TAG;
+		}
+	}
+	else
+	{
+		int rc;
+		fd_set readFDs;
+		int fdSetSize = 0;
+
+		while(1)
+		{
+			FD_ZERO(&readFDs);
+
+			FD_SET(MPI_My_accept_socket, &readFDs);
+
+			if(MPI_My_accept_socket > fdSetSize)
+				fdSetSize = MPI_My_accept_socket;
+
+			for(int i = 0; i < MPI_World_size; i++)
+			{
+				int rankSocket = MPI_Rank_sockets[i];
+				if(rankSocket != -1)
+					FD_SET(rankSocket, &readFDs);
+
+				if(rankSocket > fdSetSize)
+					fdSetSize = rankSocket;
+			}
+
+			fdSetSize++;
+
+			rc = select(fdSetSize, &readFDs, NULL, NULL, NULL);
+
+			if(rc == -1 && errno == EINTR)
+				continue;
+
+			if(FD_ISSET(MPI_My_accept_socket, &readFDs))
+			{
+				int newSocket;
+				struct sockaddr_in from;
+				socklen_t fromLen = sizeof(from);
+
+				int success = 0;
+
+				while(!success)
+				{
+					newSocket = accept(MPI_My_accept_socket, (struct sockaddr *)&from, &fromLen);
+
+					if(newSocket == -1)
+					{
+						if(errno == EINTR)
+							continue;
+
+						ErrorCheck(newSocket, "ProgressEngine accept");
+					}
+					else
+						success = 1;
+				}
+
+				int optVal = 1;
+				setsockopt(newSocket, IPPROTO_TCP, TCP_NODELAY, (char *)&optVal, sizeof(optVal));
+
+				int newSocketRank;
+				read(newSocket, (void *)&newSocketRank, sizeof(int));
+
+				MPI_Rank_sockets[newSocketRank] = newSocket;
+			}
+
+			for(int i = 0; i < MPI_World_size; i++)
+			{
+				int rankSocket = MPI_Rank_sockets[i];
+
+				if(rankSocket != -1 && FD_ISSET(rankSocket, &readFDs))
+				{
+					int requestFlag;
+					read(rankSocket, (void *)&requestFlag, sizeof(int));
+
+					if(requestFlag == SEND_FLAG)
+					{
+						int senderSource;
+						read(rankSocket, (void *)&senderSource, sizeof(int));
+
+						int senderTag;
+						read(rankSocket, (void *)&senderTag, sizeof(int));
+
+						status->MPI_SOURCE = senderSource;
+						status->MPI_TAG = senderTag;
+
+						if(tag == MPI_ANY_TAG || senderTag == tag)
+						{
+							int readyFlag = RECV_READY_FLAG;
+							write(rankSocket, (void *)&readyFlag, sizeof(int));
+
+							int typeSize;
+
+							if(datatype == MPI_CHAR)
+								typeSize = sizeof(char);
+							else if(datatype == MPI_INT)
+								typeSize = sizeof(int);
+
+							int bytesToRead = count * typeSize;
+
+							int bytesRead = read(rankSocket, buf, bytesToRead);
+
+							while(bytesRead < bytesToRead)
+								bytesRead += read(rankSocket, buf + bytesRead, bytesToRead - bytesRead);
+
+							return MPI_SUCCESS;
+						}
+						else
+						{
+							return MPI_ERR_TAG;
+						}
+					}
+				}
+			}
+		}
 	}
 
 	return MPI_SUCCESS;
@@ -347,7 +529,7 @@ int SetupAcceptSocket()
 	return acceptSocket;
 }
 
-void ProgressEngine(int blockingSocket)
+int ProgressEngine(int blockingSocket)
 {
 	// select on the accept socket (one day, this will also probably select on some array of nonblocking receiving sockets)
 	int rc;
@@ -362,6 +544,16 @@ void ProgressEngine(int blockingSocket)
 
 		if(MPI_My_accept_socket > fdSetSize)
 			fdSetSize = MPI_My_accept_socket;
+
+		for(int i = 0; i < MPI_World_size; i++)
+		{
+			int rankSocket = MPI_Rank_sockets[i];
+			if(rankSocket != -1)
+				FD_SET(rankSocket, &readFDs);
+
+			if(rankSocket > fdSetSize)
+				fdSetSize = rankSocket;
+		}
 
 		fdSetSize++;
 
@@ -407,12 +599,71 @@ void ProgressEngine(int blockingSocket)
 				MPI_Rank_sockets[newSocketRank] = newSocket;
 
 				if(MPI_My_accept_socket == blockingSocket)
-					break;
+					return 0;
+			}
+
+			for(int i = 0; i < MPI_World_size; i++)
+			{
+				int rankSocket = MPI_Rank_sockets[i];
+
+				if(rankSocket != -1 && FD_ISSET(rankSocket, &readFDs))
+				{
+					int requestFlag;
+					read(rankSocket, (void *)&requestFlag, sizeof(int));
+
+					if(requestFlag == RECV_READY_FLAG)
+					{
+						return 0;
+					}
+				}
 			}
 		}
 		else
 		{
+			struct timeval tv;
+			tv.tv_sec = 0;
 
+			rc = select(fdSetSize, &readFDs, NULL, NULL, &tv);
+
+			if(rc == -1 && errno == EINTR)
+				continue;
+
+			if(FD_ISSET(MPI_My_accept_socket, &readFDs))
+			{
+				int newSocket;
+				struct sockaddr_in from;
+				socklen_t fromLen = sizeof(from);
+
+				int success = 0;
+
+				while(!success)
+				{
+					newSocket = accept(MPI_My_accept_socket, (struct sockaddr *)&from, &fromLen);
+
+					if(newSocket == -1)
+					{
+						if(errno == EINTR)
+							continue;
+
+						ErrorCheck(newSocket, "ProgressEngine accept");
+					}
+					else
+						success = 1;
+				}
+
+				int optVal = 1;
+				setsockopt(newSocket, IPPROTO_TCP, TCP_NODELAY, (char *)&optVal, sizeof(optVal));
+
+				int newSocketRank;
+				read(newSocket, (void *)&newSocketRank, sizeof(int));
+
+				MPI_Rank_sockets[newSocketRank] = newSocket;
+
+				break;
+			}
 		}
 	}
+
+	// if we got this far, assume there was no specific task we're working on
+	return 0;
 }
