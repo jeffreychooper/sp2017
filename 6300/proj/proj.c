@@ -6,6 +6,15 @@
 void ErrorCheck(int val, char *str);
 int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile);
 
+int numModules;
+int numNodes;
+int *moduleMapping;
+double *nodeProcessingPower;
+double **linkBandwidth;
+double **linkDelay;
+double *moduleComplexity;
+double **dataDependencyMatrix;
+
 int main(int argc, char *argv[])
 {
 	// get the map file, network graph, and task graph from the command line
