@@ -1,9 +1,13 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <string.h>
+
 void ErrorCheck(int val, char *str);
 
 int main(int argc, char *argv[])
 {
 	// get the map file, network graph, and task graph from the command line
-	if(argc < 
 
 	// open the files
 
