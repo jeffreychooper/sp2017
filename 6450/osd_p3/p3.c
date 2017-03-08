@@ -1,5 +1,3 @@
-// TODO: make changes so my output can print device names
-// TODO: sending hosts also need to print a message
 // SOCKPAIR SIDES
 // 0 interpreter-switch 1
 // 0 interpreter-host/router 1
@@ -23,6 +21,10 @@
 #define EXTRA_OPERATIONS 10
 #define MAX_ETHERNET_PACKET_SIZE 104
 #define PAYLOAD_SIZE 100
+
+#define FINISHED_FLAG 1
+#define MACSEND_FLAG 2
+#define ARPTEST_FLAG 3
 
 // switch information
 typedef struct {
@@ -536,7 +538,7 @@ int main(int argc, char *argv[])
 						unsigned char buffer[100] = { 0 };
 
 						// 2 means macsend
-						charBuffer[0] = 2;
+						charBuffer[0] = MACSEND_FLAG;
 						write(routerInterface, (void *)&charBuffer, 1);
 
 						// receiver
@@ -582,7 +584,7 @@ int main(int argc, char *argv[])
 						unsigned char buffer[100];
 
 						// 2 means macsend
-						charBuffer[0] = 2;
+						charBuffer[0] = MACSEND_FLAG;
 						write(hostInterface, (void *)&charBuffer, 1);
 
 						// receiver
@@ -607,6 +609,57 @@ int main(int argc, char *argv[])
 					}
 					
 					index++;
+				}
+			}
+		}
+		else if(strcmp(operations[operationsIndex][0], "arptest") == 0)
+		{
+			// get the target host or router's name
+			char senderName[NAME_LENGTH];
+			strcpy(&senderName[0], operations[operationsIndex][1]);
+
+			// find which host or router it is
+			int deviceInterface = 0;
+
+			for(int deviceIndex = 0; deviceIndex < numRouters; deviceIndex++)
+			{
+				if(strcmp(routers[deviceIndex].name, senderName) == 0)
+				{
+					deviceInterface = routerControlFDs[deviceIndex];
+					break;
+				}
+			}
+
+			if(!deviceInterface)
+			{
+				for(int deviceIndex = 0; deviceIndex < numHosts; deviceIndex++)
+				{
+					if(strcmp(hosts[deviceIndex].name, senderName) == 0)
+					{
+						deviceInterface = hostControlFDs[deviceIndex];
+						break;
+					}
+				}
+			}
+
+			// send the sender the required information
+			unsigned char charBuffer[1];
+
+			// 3 means arptest
+			charBuffer[0] = ARPTEST_FLAG;
+			write(deviceInterface, (void *)&charBuffer, 1);
+
+			// network part of IP
+			char *p;
+			if(p = strtok(operations[operationsIndex][2], "."))
+			{
+				charBuffer[0] = (unsigned char)atoi(p);
+				write(deviceInterface, (void *)&charBuffer, 1);
+
+				if(p = strtok(NULL, " \0"))
+				{
+					charBuffer[0] = (unsigned char)atoi(p);
+					write(deviceInterface, (void *)&charBuffer, 1);
 				}
 			}
 		}
@@ -776,7 +829,7 @@ void ActAsSwitch(SwitchInfo *switchInfo)
 
 			read(switchInfo->interpreterFD, (void *)&buffer, 1);
 
-			if(buffer[0] = 1)
+			if(buffer[0] = FINISHED_FLAG)
 			{
 				done = 1;
 			}
@@ -789,7 +842,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 	#if DEBUG
 	int debug = 1;
 	while(debug)
-		;
+	 	;
 	#endif
 
 	int done = 0;
@@ -866,11 +919,11 @@ void ActAsRouter(RouterInfo *routerInfo)
 			read(routerInfo->interpreterFD, (void *)&buffer, 1);
 
 			// (2) for macsend, (1) for done
-			if(buffer[0] == 1)
+			if(buffer[0] == FINISHED_FLAG)
 			{
 				done = 1;
 			}
-			else if(buffer[0] == 2)
+			else if(buffer[0] == MACSEND_FLAG)
 			{
 				char receiver[1];
 				char sender[1];
@@ -918,6 +971,55 @@ void ActAsRouter(RouterInfo *routerInfo)
 					printf("%s: macsend bcast on %d: %s\n", routerInfo->name, (int)sender[0], payload);
 					free(payload);
 				}
+
+				int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
+
+				while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
+					bytesWritten += write(sendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+				free(packetToSend);
+			}
+			else if(buffer[0] == ARPTEST_FLAG)
+			{
+				unsigned char netIP[1];
+				unsigned char hostIP[1];
+				unsigned char message[100] = { 0 };
+
+				read(routerInfo->interpreterFD, (void *)&netIP, 1);
+				read(routerInfo->interpreterFD, (void *)&hostIP, 1);
+
+				// broadcast the request
+				int interfaceIndex = 0;
+				int sendInterface = 0;
+
+				while(interfaceIndex < 6 && routerInfo->interfaces[interfaceIndex])
+				{
+					if(routerInfo->netIPs[interfaceIndex] == netIP[0])
+					{
+						sendInterface = routerInfo->interfaces[interfaceIndex];
+						break;
+					}
+
+					interfaceIndex++;
+				}
+
+				if(!sendInterface)
+				{
+					interfaceIndex = 0;
+					sendInterface = routerInfo->interfaces[0];
+				}
+
+				// generate the message (the ip we're interested in...)
+				message[0] = netIP[0];
+				message[1] = hostIP[0];
+
+				char *packetToSend = CreateEthernetPacket(255,
+														  routerInfo->MACs[interfaceIndex],
+														  (unsigned char)1,
+														  4 + strlen(message),
+														  message);
+
+				printf("%s: arpreq on %d: %d.%d\n", routerInfo->name, routerInfo->MACs[interfaceIndex], netIP[0], hostIP[0]);
 
 				int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
 
@@ -994,7 +1096,7 @@ void ActAsHost(HostInfo *hostInfo)
 			read(hostInfo->interpreterFD, (void *)&buffer, 1);
 
 			// (2) for macsend, (1) for done
-			if(buffer[0] == 1)
+			if(buffer[0] == FINISHED_FLAG)
 			{
 				done = 1;
 			}
