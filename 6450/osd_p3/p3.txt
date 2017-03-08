@@ -1,0 +1,72 @@
+
+                        Operating Systems Design
+                              Spring 2017
+                               Project 3
+
+
+turnin id:  osd_p3
+
+
+We assume that only the interpreter knows all details of the configuration,
+i.e. that devices will not cheat and look into interpreter data structures.
+Thus, before building an IP layer, it would be advantageous to support
+ARP so that we can map ipaddrs to macaddrs for hosts/routers that are on
+the same switch.  We will print msgs showing the flow of the arp messages.
+
+
+Recall that the 'type' field was 0 in p2.txt, indicating a simple test
+packet.  However, we will begin adding new protocols (types) now:
+    1 for ARP req
+    2 for ARP reply
+    3+  for ICMP and IP in later projects
+
+NOTE: the test protocol (0) and ARP (1,2) are NOT routable;
+      ICMP and IP will be routable.
+
+
+For this project, develop some new commands to be interpreted:
+
+    arptest to_vh_or_vr ipaddr  # e.g. arptest h1 1.2  OR  arptest r1 2.2
+
+        goes from intepreter to specified host/router causing that host to
+            generate an arpreq for the specified ipaddr; the result will
+            be placed into the host's arp cache
+
+        requester generates simple ARP request packet which is a macsend
+        (with mac addrs etc) for a protocol 1 type of message; the payload
+        will contain:
+            2 bytes (payload is ipaddr that we need the mac for, e.g. 2.1)
+
+        replyer generates simple ARP reply packet which is also a correct
+        macsend where the payload contains the requested ipaddr and the
+        correct mac for that ipaddr:
+            3 bytes (payload is 2 bytes of ipaddr requested, and 1 byte mac)
+
+        NOTE that it should be clear from the network portion of the ipaddr
+        which switch to place the arpreq onto.
+
+        NOTE that an ipaddr (for another host) should default to unreachable via
+        the local switch until an arpreq is sent and an arprep is received.
+
+        Assume that about 1 sec is sufficient time for an arprep to arrive
+        before treating an ipaddr as not reachable.
+
+        Sending hosts/routers print:
+            from_hostname:  arpxxxx to to_hostname on from_macaddr: payload
+            # where xxxx is either req or reply
+
+        If no arprep is received after an arpreq, print:
+            from_hostname:  arpreq to to_hostname timed out
+
+        Otherwise:
+            Receiving hosts/routers print:
+                to_hostname:  arpxxxx from from_hostname on to_macaddr:  payload
+                # where xxxx is either req or reply
+
+    arpprt hostname
+        Cause the specified host to print its arp cache.
+        This is merely a debugging tool between the interpreter and the host/router,
+        and does not generate traffic among the virtual systems.
+        The host should print for each iPaddr in its cache:
+            my_hostname:  ipaddr  macaddr_for_ipaddr  my_network_to_send_on
+        ARP caches will initially be empty.
