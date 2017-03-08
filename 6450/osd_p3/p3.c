@@ -1100,7 +1100,7 @@ void ActAsHost(HostInfo *hostInfo)
 			{
 				done = 1;
 			}
-			else if(buffer[0] == 2)
+			else if(buffer[0] == MACTEST_FLAG)
 			{
 				unsigned char receiver[1];
 				unsigned char sender[1];
@@ -1138,6 +1138,36 @@ void ActAsHost(HostInfo *hostInfo)
 
 				while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
 					bytesWritten += write(hostInfo->interface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+				free(packetToSend);
+			}
+			else if(buffer[0] == ARPTEST_FLAG)
+			{
+				unsigned char netIP[1];
+				unsigned char hostIP[1];
+				unsigned char message[100] = { 0 };
+
+				int sendInterface = hostInfo->interface;
+
+				read(hostInfo->interpreterFD, (void *)&netIP, 1);
+				read(hostInfo->interpreterFD, (void *)&hostIP, 1);
+
+				// broadcast the request
+				message[0] = netIP[0];
+				message[1] = hostIP[1];
+
+				char *packetToSend = CreateEthernetPacket(255,
+														  hostInfo->MAC,
+														  (unsigned char)1,
+														  4 + strlen(message),
+														  message);
+
+				printf("%s: arpreq on %d: %d.%d\n", hostInfo->name, hostInfo->MAC, netIP[0], hostIP[0]);
+
+				int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
+
+				while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
+					bytesWritten += write(sendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
 
 				free(packetToSend);
 			}
