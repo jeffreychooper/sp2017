@@ -1,3 +1,4 @@
+// TODO: get timeouts working... in router
 // SOCKPAIR SIDES
 // 0 interpreter-switch 1
 // 0 interpreter-host/router 1
@@ -11,6 +12,7 @@
 #include <errno.h>
 #include <sys/wait.h>
 #include <ctype.h>
+#include <sys/time.h>
 
 #define NAME_LENGTH 64
 #define MAX_LINE_LENGTH 896
@@ -853,6 +855,14 @@ void ActAsRouter(RouterInfo *routerInfo)
 	fd_set readFDs;
 	unsigned char buffer[MAX_ETHERNET_PACKET_SIZE];
 
+	int expectingARPReply = 0;
+	struct timeval arpStartTime;
+	struct timeval oneSec;
+	oneSec.tv_usec = 1000;
+	struct timeval timePassed;
+	unsigned char arpWaitNet;
+	unsigned char arpWaitHost;
+
 	while(!done)
 	{
 		FD_ZERO(&readFDs);
@@ -879,7 +889,29 @@ void ActAsRouter(RouterInfo *routerInfo)
 
 		setSize++;
 
-		rc = select(setSize, &readFDs, NULL, NULL, NULL);
+		if(!expectingARPReply)
+		{
+			rc = select(setSize, &readFDs, NULL, NULL, NULL);
+		}
+		else
+		{
+			gettimeofday(&timePassed, NULL);
+			timePassed.tv_usec -= arpStartTime.tv_usec;
+
+			if(timePassed.tv_usec > 1000)
+			{
+				printf("%s: arpreq to %d.%d timed out\n", routerInfo->name, arpWaitNet, arpWaitHost);
+				expectingARPReply = 0;
+				rc = select(setSize, &readFDs, NULL, NULL, NULL);
+			}
+			else
+			{
+				struct timeval tv;
+				tv.tv_usec = oneSec.tv_usec - timePassed.tv_usec;
+
+				rc = select(setSize, &readFDs, NULL, NULL, &tv);
+			}
+		}
 
 		if(rc == -1 && errno == EINTR)
 			continue;
@@ -905,7 +937,13 @@ void ActAsRouter(RouterInfo *routerInfo)
 					bytesRead += read(routerInfo->interfaces[interfaceIndex], (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
 
 				char *payload = GetPayload((char *)buffer);
-				printf("%s: macsend from %d on %d: %s\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), (int)routerInfo->MACs[interfaceIndex], payload);
+				if(payload[2] == 0)
+					printf("%s: macsend from %d on %d: %s\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), (int)routerInfo->MACs[interfaceIndex], payload);
+				else if(payload[2] == 1)
+				{
+					// arp request
+				}
+
 				free(payload);
 			}
 
@@ -1027,6 +1065,11 @@ void ActAsRouter(RouterInfo *routerInfo)
 					bytesWritten += write(sendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
 
 				free(packetToSend);
+
+				arpWaitNet = netIP[0];
+				arpWaitHost = hostIP[0];
+				expectingARPReply = 1;
+				gettimeofday(&arpStartTime, NULL);
 			}
 		}
 	}
@@ -1100,7 +1143,7 @@ void ActAsHost(HostInfo *hostInfo)
 			{
 				done = 1;
 			}
-			else if(buffer[0] == MACTEST_FLAG)
+			else if(buffer[0] == MACSEND_FLAG)
 			{
 				unsigned char receiver[1];
 				unsigned char sender[1];

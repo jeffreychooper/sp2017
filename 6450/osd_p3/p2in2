@@ -1,0 +1,12 @@
+vs  s1  1
+vr  r1  101 1.1
+vh  h2  102 1.2
+vh  h3  103 1.3
+vh  h4  104 1.4
+vh  h5  105 1.5
+
+prt hello world
+
+prt
+arptest r1 1.2
+pause 5
