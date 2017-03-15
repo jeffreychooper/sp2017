@@ -1,4 +1,5 @@
-// TODO: get timeouts working... in router
+// TODO: get timeouts working in host
+// TODO: why is the payload not working when receiving an arpreq
 // SOCKPAIR SIDES
 // 0 interpreter-switch 1
 // 0 interpreter-host/router 1
@@ -937,11 +938,21 @@ void ActAsRouter(RouterInfo *routerInfo)
 					bytesRead += read(routerInfo->interfaces[interfaceIndex], (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
 
 				char *payload = GetPayload((char *)buffer);
-				if(payload[2] == 0)
+				if(buffer[2] == 0)
 					printf("%s: macsend from %d on %d: %s\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), (int)routerInfo->MACs[interfaceIndex], payload);
-				else if(payload[2] == 1)
+				else if(buffer[2] == 1)
 				{
-					// arp request
+					// check if they're asking for me
+					if(payload[0] == routerInfo->netIPs[interfaceIndex] && payload[1] == routerInfo->hostIPs[interfaceIndex])
+					{
+						printf("%s: arpreq from %d on %d: %s\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), (int)routerInfo->MACs[interfaceIndex], payload);
+
+						// TODO: send arpreply
+					}
+				}
+				else if(buffer[2] == 2)
+				{
+					// TODO: handle arpreply
 				}
 
 				free(payload);
@@ -1091,6 +1102,14 @@ void ActAsHost(HostInfo *hostInfo)
 	fd_set readFDs;
 	unsigned char buffer[MAX_ETHERNET_PACKET_SIZE];
 
+	int expectingARPReply = 0;
+	struct timeval arpStartTime;
+	struct timeval oneSec;
+	oneSec.tv_usec = 1000;
+	struct timeval timePassed;
+	unsigned char arpWaitNet;
+	unsigned char arpWaitHost;
+
 	while(!done)
 	{
 		FD_ZERO(&readFDs);
@@ -1108,7 +1127,29 @@ void ActAsHost(HostInfo *hostInfo)
 
 		setSize++;
 
-		rc = select(setSize, &readFDs, NULL, NULL, NULL);
+		if(!expectingARPReply)
+		{
+			rc = select(setSize, &readFDs, NULL, NULL, NULL);
+		}
+		else
+		{
+			gettimeofday(&timePassed, NULL);
+			timePassed.tv_usec -= arpStartTime.tv_usec;
+
+			if(timePassed.tv_usec > 1000)
+			{
+				printf("%s: arpreq to %d.%d timed out\n", hostInfo->name, arpWaitNet, arpWaitHost);
+				expectingARPReply = 0;
+				rc = select(setSize, &readFDs, NULL, NULL, NULL);
+			}
+			else
+			{
+				struct timeval tv;
+				tv.tv_usec = oneSec.tv_usec - timePassed.tv_usec;
+
+				rc = select(setSize, &readFDs, NULL, NULL, &tv);
+			}
+		}
 
 		if(rc == -1 && errno == EINTR)
 			continue;
@@ -1123,7 +1164,22 @@ void ActAsHost(HostInfo *hostInfo)
 					bytesRead += read(hostInfo->interface, (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
 
 					char *payload = GetPayload((char *)buffer);
-					printf("%s: macsend from %d on %d: %s\n", hostInfo->name, GetEthernetPacketSourceMAC(buffer), (int)hostInfo->MAC, payload);
+					if(buffer[2] == 0)
+						printf("%s: macsend from %d on %d: %s\n", hostInfo->name, GetEthernetPacketSourceMAC(buffer), (int)hostInfo->MAC, payload);
+					else if(buffer[2] == 1)
+					{
+						if(payload[0] == hostInfo->netIP && payload[1] == hostInfo->hostIP)
+						{
+							printf("%s: arpreq from %d on %d: %s\n", hostInfo->name, GetEthernetPacketSourceMAC(buffer), (int)hostInfo->MAC, payload);
+
+							// TODO: send arpreply
+						}
+					}
+					else if(buffer[2] == 2)
+					{
+						// TODO: handle arpreply
+					}
+
 					free(payload);
 			}
 			else
@@ -1213,6 +1269,11 @@ void ActAsHost(HostInfo *hostInfo)
 					bytesWritten += write(sendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
 
 				free(packetToSend);
+
+				arpWaitNet = netIP[0];
+				arpWaitHost = hostIP[0];
+				expectingARPReply = 1;
+				gettimeofday(&arpStartTime, NULL);
 			}
 		}
 	}
