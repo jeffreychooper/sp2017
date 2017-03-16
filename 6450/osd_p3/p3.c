@@ -1,5 +1,5 @@
 // TODO: get timeouts working in host
-// TODO: why is the payload not working when receiving an arpreq
+// TODO: why is the payload not working when receiving an arpreq (...see line 1082? I manually send what the payload would look like)
 // SOCKPAIR SIDES
 // 0 interpreter-switch 1
 // 0 interpreter-host/router 1
@@ -945,9 +945,20 @@ void ActAsRouter(RouterInfo *routerInfo)
 					// check if they're asking for me
 					if(payload[0] == routerInfo->netIPs[interfaceIndex] && payload[1] == routerInfo->hostIPs[interfaceIndex])
 					{
-						printf("%s: arpreq from %d on %d: %s\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), (int)routerInfo->MACs[interfaceIndex], payload);
+						printf("%s: arpreq from %d on %d: %u\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), (int)routerInfo->MACs[interfaceIndex], payload);
 
-						// TODO: send arpreply
+						unsigned char message[100] = { 0 };
+						message[0] = payload[0];
+						message[1] = payload[1];
+						message[2] = routerInfo->MACs[interfaceIndex];
+
+						char *packetToSend = CreateEthernetPacket(GetEthernetPacketSourceMAC(buffer),
+																  routerInfo->MACs[interfaceIndex],
+																  (unsigned char)2,
+																  4 + strlen(message),
+																  message);
+
+						printf("%s: arpreply to %d on %d: %u\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), routerInfo->MACs[interfaceIndex], message);
 					}
 				}
 				else if(buffer[2] == 2)
