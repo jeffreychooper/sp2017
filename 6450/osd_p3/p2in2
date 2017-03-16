@@ -8,5 +8,5 @@ vh  h5  105 1.5
 prt hello world
 
 prt
-arptest h2 1.1
+arptest r1 1.2
 pause 5
