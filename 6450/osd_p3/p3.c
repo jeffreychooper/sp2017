@@ -1,4 +1,4 @@
-// TODO: get timeouts working in host
+// TODO: check issue with incorrect output....
 // SOCKPAIR SIDES
 // 0 interpreter-switch 1
 // 0 interpreter-host/router 1
@@ -943,9 +943,10 @@ void ActAsRouter(RouterInfo *routerInfo)
 		else
 		{
 			gettimeofday(&timePassed, NULL);
+			timePassed.tv_sec -= arpStartTime.tv_sec;
 			timePassed.tv_usec -= arpStartTime.tv_usec;
 
-			if(timePassed.tv_usec > 1000)
+			if(timePassed.tv_sec >= 1 || timePassed.tv_usec > 1000)
 			{
 				printf("%s: arpreq to %d.%d timed out\n", routerInfo->name, arpWaitNet, arpWaitHost);
 				expectingARPReply = 0;
@@ -1230,9 +1231,10 @@ void ActAsHost(HostInfo *hostInfo)
 		else
 		{
 			gettimeofday(&timePassed, NULL);
+			timePassed.tv_sec -= arpStartTime.tv_sec;
 			timePassed.tv_usec -= arpStartTime.tv_usec;
 
-			if(timePassed.tv_usec > 1000)
+			if(timePassed.tv_sec >= 1 || timePassed.tv_usec > 1000)
 			{
 				printf("%s: arpreq to %d.%d timed out\n", hostInfo->name, arpWaitNet, arpWaitHost);
 				expectingARPReply = 0;
