@@ -1,5 +1,4 @@
 // TODO: get timeouts working in host
-// TODO: why is the payload not working when receiving an arpreq (...see line 1082? I manually send what the payload would look like)
 // SOCKPAIR SIDES
 // 0 interpreter-switch 1
 // 0 interpreter-host/router 1
@@ -24,10 +23,12 @@
 #define EXTRA_OPERATIONS 10
 #define MAX_ETHERNET_PACKET_SIZE 104
 #define PAYLOAD_SIZE 100
+#define ARP_CACHE_SIZE 6
 
 #define FINISHED_FLAG 1
 #define MACSEND_FLAG 2
 #define ARPTEST_FLAG 3
+#define ARPPRT_FLAG 4
 
 // switch information
 typedef struct {
@@ -49,6 +50,10 @@ unsigned char netIPs[6];
 unsigned char hostIPs[6];
 int interfaces[6];
 int interpreterFD;
+unsigned char arpCacheNet[6];
+unsigned char arpCacheHost[6];
+unsigned char arpCacheMAC[6];
+int arpCacheIndex;
 
 } RouterInfo;
 
@@ -61,6 +66,10 @@ unsigned char netIP;
 unsigned char hostIP;
 int interface;
 int interpreterFD;
+unsigned char arpCacheNet[6];
+unsigned char arpCacheHost[6];
+unsigned char arpCacheMAC[6];
+int arpCacheIndex;
 
 } HostInfo;
 
@@ -666,6 +675,43 @@ int main(int argc, char *argv[])
 				}
 			}
 		}
+		else if(strcmp(operations[operationsIndex][0], "arpprt") == 0)
+		{
+			// get the target host or router's name
+			char targetName[NAME_LENGTH];
+			strcpy(&targetName[0], operations[operationsIndex][1]);
+
+			// find which host or router it is
+			int deviceInterface = 0;
+
+			for(int deviceIndex = 0; deviceIndex < numRouters; deviceIndex++)
+			{
+				if(strcmp(routers[deviceIndex].name, targetName) == 0)
+				{
+					deviceInterface = routerControlFDs[deviceIndex];
+					break;
+				}
+			}
+
+			if(!deviceInterface)
+			{
+				for(int deviceIndex = 0; deviceIndex < numHosts; deviceIndex++)
+				{
+					if(strcmp(hosts[deviceIndex].name, targetName) == 0)
+					{
+						deviceInterface = hostControlFDs[deviceIndex];
+						break;
+					}
+				}
+			}
+
+			// tell the target to print its cache
+			unsigned char charBuffer[1];
+
+			// 4 means arpprt
+			charBuffer[0] = ARPPRT_FLAG;
+			write(deviceInterface, (void *)&charBuffer, 1);
+		}
 
 		operationsIndex++;
 	}
@@ -945,7 +991,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 					// check if they're asking for me
 					if(payload[0] == routerInfo->netIPs[interfaceIndex] && payload[1] == routerInfo->hostIPs[interfaceIndex])
 					{
-						printf("%s: arpreq from %d on %d: %u\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), (int)routerInfo->MACs[interfaceIndex], payload);
+						printf("%s: arpreq from %d on %d: %d.%d\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), (int)routerInfo->MACs[interfaceIndex], payload[0], payload[1]);
 
 						unsigned char message[100] = { 0 };
 						message[0] = payload[0];
@@ -963,16 +1009,24 @@ void ActAsRouter(RouterInfo *routerInfo)
 						while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
 							bytesWritten += write(routerInfo->interfaces[interfaceIndex], (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
 							
-						printf("%s: arpreply to %d on %d: %u\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), routerInfo->MACs[interfaceIndex], message);
+						printf("%s: arpreply to %d on %d: %d.%d %d\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), routerInfo->MACs[interfaceIndex], message[0], message[1], message[2]);
 					}
 				}
 				else if(buffer[2] == 2)
 				{
-					printf("%s: arpreply from %d on %d: %u\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), routerInfo->MACs[interfaceIndex], payload);
+					printf("%s: arpreply from %d on %d: %d.%d %d\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), routerInfo->MACs[interfaceIndex], payload[0], payload[1], payload[2]);
 
 					// stick the correct info in cache
+					int index = routerInfo->arpCacheIndex;
+					routerInfo->arpCacheNet[index] = payload[0];
+					routerInfo->arpCacheHost[index] = payload[1];
+					routerInfo->arpCacheMAC[index] = payload[2];
 
+					routerInfo->arpCacheIndex++;
 
+					if(routerInfo->arpCacheIndex == ARP_CACHE_SIZE)
+						routerInfo->arpCacheIndex = 0;
+					
 					expectingARPReply = 0;
 				}
 
@@ -1103,6 +1157,27 @@ void ActAsRouter(RouterInfo *routerInfo)
 				expectingARPReply = 1;
 				gettimeofday(&arpStartTime, NULL);
 			}
+			else if(buffer[0] == ARPPRT_FLAG)
+			{
+				if(routerInfo->arpCacheIndex == 0 && routerInfo->arpCacheMAC[0] == 0)
+				{
+					printf("%s: ARP cache is currently empty\n", routerInfo->name);
+				}
+				else if(routerInfo->arpCacheIndex == 0)
+				{
+					for(int i = 0; i < ARP_CACHE_SIZE; i++)
+					{
+						printf("%s: IP: %d.%d\tMAC: %d\n", routerInfo->name, routerInfo->arpCacheNet[i], routerInfo->arpCacheHost[i], routerInfo->arpCacheMAC[i]);
+					}
+				}
+				else
+				{
+					for(int i = 0; i < routerInfo->arpCacheIndex; i++)
+					{
+						printf("%s: IP: %d.%d\tMAC: %d\n", routerInfo->name, routerInfo->arpCacheNet[i], routerInfo->arpCacheHost[i], routerInfo->arpCacheMAC[i]);
+					}
+				}
+			}
 		}
 	}
 }
@@ -1191,7 +1266,7 @@ void ActAsHost(HostInfo *hostInfo)
 					{
 						if(payload[0] == hostInfo->netIP && payload[1] == hostInfo->hostIP)
 						{
-							printf("%s: arpreq from %d on %d: %s\n", hostInfo->name, GetEthernetPacketSourceMAC(buffer), (int)hostInfo->MAC, payload);
+							printf("%s: arpreq from %d on %d: %d.%d\n", hostInfo->name, GetEthernetPacketSourceMAC(buffer), (int)hostInfo->MAC, payload[0], payload[1]);
 
 							unsigned char message[100] = { 0 };
 							message[0] = payload[0];
@@ -1208,14 +1283,23 @@ void ActAsHost(HostInfo *hostInfo)
 							while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
 								bytesWritten += write(hostInfo->interface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
 
-							printf("%s: arpreply to %d on %d: %u\n", hostInfo->name, GetEthernetPacketSourceMAC(buffer), hostInfo->MAC, message);
+							printf("%s: arpreply to %d on %d: %d.%d %d\n", hostInfo->name, GetEthernetPacketSourceMAC(buffer), hostInfo->MAC, payload[0], payload[1], payload[2]);
 						}
 					}
 					else if(buffer[2] == 2)
 					{
-						printf("%s: arpreply from %d on %d: %u\n", hostInfo->name, GetEthernetPacketSourceMAC(buffer), hostInfo->MAC, payload);
+						printf("%s: arpreply from %d on %d: %d.%d %d\n", hostInfo->name, GetEthernetPacketSourceMAC(buffer), hostInfo->MAC, payload[0], payload[1], payload[2]);
 
 						// stick the correct info in cache
+						int index = hostInfo->arpCacheIndex;
+						hostInfo->arpCacheNet[index] = payload[0];
+						hostInfo->arpCacheHost[index] = payload[1];
+						hostInfo->arpCacheMAC[index] = payload[2];
+
+						hostInfo->arpCacheIndex++;
+
+						if(hostInfo->arpCacheIndex == ARP_CACHE_SIZE)
+							hostInfo->arpCacheIndex = 0;
 
 						expectingARPReply = 0;
 					}
@@ -1293,7 +1377,7 @@ void ActAsHost(HostInfo *hostInfo)
 
 				// broadcast the request
 				message[0] = netIP[0];
-				message[1] = hostIP[1];
+				message[1] = hostIP[0];
 
 				char *packetToSend = CreateEthernetPacket(255,
 														  hostInfo->MAC,
@@ -1314,6 +1398,28 @@ void ActAsHost(HostInfo *hostInfo)
 				arpWaitHost = hostIP[0];
 				expectingARPReply = 1;
 				gettimeofday(&arpStartTime, NULL);
+			}
+			else if(buffer[0] == ARPPRT_FLAG)
+			{
+				if(hostInfo->arpCacheIndex == 0 && hostInfo->arpCacheMAC[0] == 0)
+				{
+					printf("%s: ARP cache is currently empty\n", hostInfo->name);
+				}
+				else if(hostInfo->arpCacheIndex == 0)
+				{
+					for(int i = 0; i < ARP_CACHE_SIZE; i++)
+					{
+						printf("%s: IP: %d.%d\tMAC: %d\n", hostInfo->name, hostInfo->arpCacheNet[i], hostInfo->arpCacheHost[i], hostInfo->arpCacheMAC[i]);
+					}
+				}
+				else
+				{
+					for(int i = 0; i < hostInfo->arpCacheIndex; i++)
+					{
+						printf("%s: IP: %d.%d\tMAC: %d\n", hostInfo->name, hostInfo->arpCacheNet[i], hostInfo->arpCacheHost[i], hostInfo->arpCacheMAC[i]);
+					}
+
+				}
 			}
 		}
 	}

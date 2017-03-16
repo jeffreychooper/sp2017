@@ -8,10 +8,10 @@ vh  h5  105 1.5
 prt hello world
 
 prt
-arpprt r1
+arpprt h2
 prt
-arptest r1 1.2
+arptest h2 1.1
 prt
 pause 2
-arpprt r1
+arpprt h2
 pause 2
