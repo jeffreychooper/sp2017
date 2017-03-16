@@ -938,7 +938,6 @@ void ActAsRouter(RouterInfo *routerInfo)
 					bytesRead += read(routerInfo->interfaces[interfaceIndex], (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
 
 				char *payload = GetPayload((char *)buffer);
-				printf("buffer[2]: %d\n", buffer[2]);
 				if(buffer[2] == 0)
 					printf("%s: macsend from %d on %d: %s\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), (int)routerInfo->MACs[interfaceIndex], payload);
 				else if(buffer[2] == 1)
@@ -1214,7 +1213,11 @@ void ActAsHost(HostInfo *hostInfo)
 					}
 					else if(buffer[2] == 2)
 					{
-						// TODO: handle arpreply
+						printf("%s: arpreply from %d on %d: %u\n", hostInfo->name, GetEthernetPacketSourceMAC(buffer), hostInfo->MAC, payload);
+
+						// stick the correct info in cache
+
+						expectingARPReply = 0;
 					}
 
 					free(payload);
