@@ -1183,7 +1183,18 @@ void ActAsHost(HostInfo *hostInfo)
 						{
 							printf("%s: arpreq from %d on %d: %s\n", hostInfo->name, GetEthernetPacketSourceMAC(buffer), (int)hostInfo->MAC, payload);
 
-							// TODO: send arpreply
+							unsigned char message[100] = { 0 };
+							message[0] = payload[0];
+							message[1] = payload[1];
+							message[2] = hostInfo->MAC;
+
+							char *packetToSend = CreateEthernetPacket(GetEthernetPacketSourceMAC(buffer),
+																	  hostInfo->MAC,
+																	  (unsigned char)2,
+																	  4 + strlen(message),
+																	  message);
+
+							printf("%s: arpreply to %d on %d: %u\n", hostInfo->name, GetEthernetPacketSourceMAC(buffer), hostInfo->MAC, message);
 						}
 					}
 					else if(buffer[2] == 2)
