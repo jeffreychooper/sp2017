@@ -1,4 +1,3 @@
-// TODO: check issue with incorrect output....
 // SOCKPAIR SIDES
 // 0 interpreter-switch 1
 // 0 interpreter-host/router 1
@@ -1285,7 +1284,7 @@ void ActAsHost(HostInfo *hostInfo)
 							while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
 								bytesWritten += write(hostInfo->interface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
 
-							printf("%s: arpreply to %d on %d: %d.%d %d\n", hostInfo->name, GetEthernetPacketSourceMAC(buffer), hostInfo->MAC, payload[0], payload[1], payload[2]);
+							printf("%s: arpreply to %d on %d: %d.%d %d\n", hostInfo->name, GetEthernetPacketSourceMAC(buffer), hostInfo->MAC, message[0], message[1], message[2]);
 						}
 					}
 					else if(buffer[2] == 2)
