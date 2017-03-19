@@ -191,6 +191,7 @@ int MPI_Finalize(void)
 	return MPI_SUCCESS;
 }
 
+// TODO: make work for dupped comms
 int MPI_Barrier(MPI_Comm comm)
 {
 	// tell ppexec I want to join a barrier
@@ -251,17 +252,31 @@ int MPI_Comm_size(MPI_Comm comm, int *size)
 int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm)
 {
 	int rc;
+	int commIndex = -1;
 
 	// validate args
 	if(dest >= MPI_World_size)
 		return MPI_ERR_RANK;
 
-	// if(comm != MPI_COMMWORLD)
-		// check if it's valid
+	if(comm != MPI_COMM_WORLD)
+	{
+		for(int i = 0; i < MPI_Num_user_comms; i++)
+		{
+			if(MPI_User_comms[i].id == comm)
+			{
+				commIndex = i;
+				break;
+			}
+		}
+
+		if(commIndex == -1)
+			return MPI_ERR_COMM;
+	}
 
 	if(tag < 0 && tag != MPI_ANY_TAG)
 		return MPI_ERR_TAG;
 
+	// TODO: fix this section if we do anything other than duping comms
 	// if no connection to the destination...
 	if(MPI_Rank_sockets[dest] == -1)
 	{
@@ -270,7 +285,8 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI
 		write(MPI_Control_socket, (void *)&connectFlag, sizeof(int));
 
 		// tell ppexec which comm I'm talking about
-		write(MPI_Control_socket, (void *)&comm, sizeof(int));
+		int commWorld = MPI_COMM_WORLD;
+		write(MPI_Control_socket, (void *)&commWorld, sizeof(int));
 
 		// tell ppexec which rank I want to connect to
 		write(MPI_Control_socket, (void *)&dest, sizeof(int));
@@ -310,21 +326,42 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI
 
 		// tell the dest which global rank I am
 		write(MPI_Rank_sockets[dest], (void *)&MPI_World_rank, sizeof(int));
+
+		// TODO: this will also need to change
+		// propagate changes to other comms
+		for(int i = 0; i < MPI_Num_user_comms; i++)
+		{
+			if(MPI_User_comms[i].parentID == MPI_COMM_WORLD)
+			{
+				MPI_User_comms[i].rankSockets[dest] = MPI_Rank_sockets[dest];
+			}
+		}
 	}
 
 	// tell dest we're sending
 	int sendFlag = SEND_FLAG;
-	write(MPI_Rank_sockets[dest], (void *)&sendFlag, sizeof(int));
+	WriteToCommRank(comm, dest, (void *)&sendFlag, sizeof(int));
 
 	// tell dest our rank
-	write(MPI_Rank_sockets[dest], (void *)&MPI_World_rank, sizeof(int));
+	if(comm == MPI_COMM_WORLD)
+		WriteToCommRank(comm, dest, (void *)&MPI_World_rank, sizeof(int));
+	else
+		WriteToCommRank(comm, dest, (void *)&MPI_User_comms[commIndex].rank, sizeof(int));
 
 	// tell dest the tag we're using
-	write(MPI_Rank_sockets[dest], (void *)&tag, sizeof(int));
+	WriteToCommRank(comm, dest, (void *)&tag, sizeof(int));
 
 	// returns 0 when it's ready
-	while(ProgressEngine(MPI_Rank_sockets[dest]))
-		;
+	if(comm == MPI_COMM_WORLD)
+	{
+		while(ProgressEngine(MPI_Rank_sockets[dest]))
+			;
+	}
+	else
+	{
+		while(ProgressEngine(MPI_User_comms[commIndex].rankSockets[dest]))
+			;
+	}
 
 	int typeSize;
 
@@ -335,10 +372,7 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI
 
 	int bytesToWrite = count * typeSize;
 
-	int bytesWritten = write(MPI_Rank_sockets[dest], buf, bytesToWrite);
-
-	while(bytesWritten < bytesToWrite)
-		bytesWritten += write(MPI_Rank_sockets[dest], buf + bytesWritten, bytesToWrite - bytesWritten);
+	WriteToCommRank(comm, dest, buf, bytesToWrite);
 
 	return MPI_SUCCESS;
 }
