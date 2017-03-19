@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <netdb.h>
 #include <netinet/tcp.h>
+#include <sys/time.h>
 
 #define HOSTNAME_LENGTH 1024
 #define MIN_PORT 4500
@@ -493,6 +494,14 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, M
 	}
 
 	return MPI_SUCCESS;
+}
+
+double MPI_Wtime(void)
+{
+	struct timeval tv;
+
+	gettimeofday(&tv, NULL);
+	return (tv.tv_sec + (tv.tv_usec / 1000000.0));
 }
 
 void ErrorCheck(int val, char *str)
