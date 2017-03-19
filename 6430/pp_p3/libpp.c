@@ -342,6 +342,9 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI
 	int sendFlag = SEND_FLAG;
 	WriteToCommRank(comm, dest, (void *)&sendFlag, sizeof(int));
 
+	// tell dest the comm we're using
+	WriteToCommRank(comm, dest, (void *)&comm, sizeof(MPI_Comm));
+
 	// tell dest our rank
 	if(comm == MPI_COMM_WORLD)
 		WriteToCommRank(comm, dest, (void *)&MPI_World_rank, sizeof(int));
@@ -399,10 +402,18 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, M
 				;
 		}
 
+		// TODO: just throws away messages on a comm it isn't expecting
 		// read from the sender until it tells me the tag it's sending
-		int senderFlag;
-		while(senderFlag != SEND_FLAG)
-			ReadFromCommRank(comm, source, (void *)&senderFlag, sizeof(int));
+		int senderComm;
+
+		while(senderComm != comm);
+		{
+			int senderFlag;
+			while(senderFlag != SEND_FLAG)
+				ReadFromCommRank(comm, source, (void *)&senderFlag, sizeof(int));
+
+			ReadFromCommRank(comm, source, (void *)&senderComm, sizeof(int));
+		}
 
 		int senderSource;
 		ReadFromCommRank(comm, source, (void *)&senderSource, sizeof(int));
@@ -436,7 +447,6 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, M
 	}
 	else
 	{
-		// TODO: this is just working by assuming they're using comm world...
 		int rc;
 		fd_set readFDs;
 		int fdSetSize = 0;
@@ -510,6 +520,12 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, M
 
 					if(requestFlag == SEND_FLAG)
 					{
+						int senderComm;
+						read(rankSocket, (void *)&senderComm, sizeof(int));
+						
+						if(senderComm != comm)
+							continue;
+
 						int senderSource;
 						read(rankSocket, (void *)&senderSource, sizeof(int));
 
