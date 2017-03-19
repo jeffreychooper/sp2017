@@ -390,6 +390,7 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, M
 
 	if(source != MPI_ANY_SOURCE)
 	{
+		// TODO: will need to fix for split comms...
 		// if we don't have a connection yet, do the progress engine (which will do the accept socket work)
 		while(MPI_Rank_sockets[source] == -1)
 		{
@@ -401,13 +402,13 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, M
 		// read from the sender until it tells me the tag it's sending
 		int senderFlag;
 		while(senderFlag != SEND_FLAG)
-			read(MPI_Rank_sockets[source], (void *)&senderFlag, sizeof(int));
+			ReadFromCommRank(comm, source, (void *)&senderFlag, sizeof(int));
 
 		int senderSource;
-		read(MPI_Rank_sockets[source], (void *)&senderSource, sizeof(int));
+		ReadFromCommRank(comm, source, (void *)&senderSource, sizeof(int));
 
 		int senderTag;
-		read(MPI_Rank_sockets[source], (void *)&senderTag, sizeof(int));
+		ReadFromCommRank(comm, source, (void *)&senderTag, sizeof(int));
 
 		status->MPI_SOURCE = senderSource;
 		status->MPI_TAG = senderTag;
@@ -415,7 +416,7 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, M
 		if(tag == MPI_ANY_TAG || senderTag == tag)
 		{
 			int readyFlag = RECV_READY_FLAG;
-			write(MPI_Rank_sockets[source], (void *)&readyFlag, sizeof(int));
+			WriteToCommRank(comm, source, (void *)&readyFlag, sizeof(int));
 
 			int typeSize;
 
@@ -426,10 +427,7 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, M
 
 			int bytesToRead = count * typeSize;
 
-			int bytesRead = read(MPI_Rank_sockets[source], buf, bytesToRead);
-
-			while(bytesRead < bytesToRead)
-				bytesRead += read(MPI_Rank_sockets[source], buf + bytesRead, bytesToRead - bytesRead);
+			ReadFromCommRank(comm, source, buf, bytesToRead);
 		}
 		else
 		{
@@ -438,6 +436,7 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, M
 	}
 	else
 	{
+		// TODO: this is just working by assuming they're using comm world...
 		int rc;
 		fd_set readFDs;
 		int fdSetSize = 0;
