@@ -599,6 +599,16 @@ int MPI_Comm_dup(MPI_Comm comm, MPI_Comm *newComm)
 	return MPI_SUCCESS;
 }
 
+int MPI_Gather(void *sendbuf, int sendcnt, MPI_Datatype sendtype, void *recvbuf, int recvcnt, MPI_Datatype recvtype, int root, MPI_Comm comm)
+{
+	return MPI_SUCCESS;
+}
+
+int MPI_Bcast(void *buffer, int count, MPI_Datatype datatype, int root, MPI_Comm comm)
+{
+	return MPI_SUCCESS;
+}
+
 void ErrorCheck(int val, char *str)
 {
     if(val < 0)
