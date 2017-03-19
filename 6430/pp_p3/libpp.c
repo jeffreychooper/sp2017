@@ -17,11 +17,23 @@
 #define MIN_PORT 4500
 #define MAX_PORT 4599
 #define DEFAULT_BACKLOG 5
+
 #define CONNECT_FLAG 1
 #define QUIT_FLAG 2
 #define BARRIER_FLAG 3
 #define RECV_READY_FLAG 4
 #define SEND_FLAG 5
+#define LOOP_ONE_FLAG 6
+#define LOOP_TWO_FLAG 7
+
+typedef struct 
+{
+	MPI_Comm id;
+	MPI_Comm parentID;
+	int rank;
+	int size;
+	int *rankSockets;
+} MPI_Comm_info;
 
 int MPI_World_rank;
 int MPI_World_size;
@@ -34,15 +46,25 @@ int MPI_Control_socket;
 int MPI_My_accept_socket;
 int *MPI_Rank_sockets;
 
+int MPI_Num_user_comms;
+MPI_Comm_info *MPI_User_comms;
+
 void ErrorCheck(int val, char *str);
 int SetupAcceptSocket();
 int ProgressEngine(int blockingSocket);		// sometimes, we'll want to block on some certain socket... so we'll select on it in particular. will return 0 when successful
+void DoubleLoop(MPI_Comm comm, int rank, int size);
+void WriteToCommRank(MPI_Comm comm, int rank, void *buf, size_t count);
+void ReadFromCommRank(MPI_Comm comm, int rank, void *buf, size_t count);
 
 int MPI_Init(int *argc, char ***argv)
 {
 	setbuf(stdout, NULL);
 
 	int rc;
+
+	// set the number of user created communicators to 0
+	MPI_Num_user_comms = 0;
+	MPI_User_comms = NULL;
 
 	// get rank, size, host, port from environment
 	MPI_World_rank = atoi(getenv("PP_MPI_RANK"));
@@ -127,6 +149,8 @@ int MPI_Finalize(void)
 
 	// free memory
 	free(MPI_Control_host);
+
+	// TODO: free MPI_Rank_sockets, MPI_User_comms, and rankSockets in user comms
 
 	// tell ppexec I'm ready
 	int quitFlag = QUIT_FLAG;
@@ -504,6 +528,77 @@ double MPI_Wtime(void)
 	return (tv.tv_sec + (tv.tv_usec / 1000000.0));
 }
 
+int MPI_Comm_dup(MPI_Comm comm, MPI_Comm *newComm)
+{
+	// get reference to old comm
+	int oldCommIndex = -1;
+
+	if(comm != MPI_COMM_WORLD)
+	{
+		for(int i = 0; i < MPI_Num_user_comms; i++)
+		{
+			if(MPI_User_comms[i].id == comm)
+			oldCommIndex = i;
+		}
+
+		if(oldCommIndex == -1)
+		{
+			return MPI_ERR_COMM;
+		}
+	}
+
+	// create space for the new communicator in MPI_User_comms
+	MPI_Num_user_comms++;
+	MPI_User_comms = realloc(MPI_User_comms, (MPI_Num_user_comms * sizeof(MPI_Comm_info)));
+
+	int newCommIndex = MPI_Num_user_comms - 1;
+
+	if(comm == MPI_COMM_WORLD)
+		MPI_User_comms[newCommIndex].rankSockets = malloc((MPI_World_size * sizeof(int)));
+	else
+		MPI_User_comms[newCommIndex].rankSockets = malloc((MPI_User_comms[oldCommIndex].size * sizeof(int)));
+
+	// store the info about the new communicator
+	if(MPI_Num_user_comms == 1)
+	{
+		MPI_User_comms[newCommIndex].id = MPI_COMM_WORLD + 1;
+		MPI_User_comms[newCommIndex].parentID = MPI_COMM_WORLD;
+	}
+	else
+	{
+		MPI_User_comms[newCommIndex].id = MPI_User_comms[newCommIndex - 1].id + 1;
+		MPI_User_comms[newCommIndex].parentID = MPI_User_comms[oldCommIndex].id;
+	}
+		
+	if(comm == MPI_COMM_WORLD)
+	{
+		MPI_User_comms[newCommIndex].rank = MPI_World_rank;
+		MPI_User_comms[newCommIndex].size = MPI_World_size;
+
+		for(int i = 0; i < MPI_World_size; i++)
+		{
+			MPI_User_comms[newCommIndex].rankSockets[i] = MPI_Rank_sockets[i];
+		}
+	}
+	else
+	{
+		MPI_User_comms[newCommIndex].rank = MPI_User_comms[oldCommIndex].rank;
+		MPI_User_comms[newCommIndex].size = MPI_User_comms[oldCommIndex].size;
+
+		for(int i = 0; i < MPI_World_size; i++)
+		{
+			MPI_User_comms[newCommIndex].rankSockets[i] = MPI_User_comms[oldCommIndex].rankSockets[i];
+		}
+	}
+
+	// set the newComm given by user
+	*newComm = MPI_User_comms[newCommIndex].id;
+
+	// block to make sure everyone is done
+
+	return MPI_SUCCESS;
+}
+
 void ErrorCheck(int val, char *str)
 {
     if(val < 0)
@@ -675,4 +770,100 @@ int ProgressEngine(int blockingSocket)
 
 	// if we got this far, assume there was no specific task we're working on
 	return 0;
+}
+
+// TODO: this is a stupid way of doing this... if the people we're receiving from aren't also in DoubleLoop, it's all wrong...
+void DoubleLoop(MPI_Comm comm, int rank, int size)
+{
+	int toSend;
+	int received;
+	int prevRank = rank - 1;
+	int nextRank = rank + 1;
+
+	if(prevRank == -1)
+		prevRank = size - 1;
+
+	if(nextRank == size)
+		nextRank = 0;
+
+	if(rank == 0)
+	{
+		toSend = LOOP_ONE_FLAG;
+
+		WriteToCommRank(comm, nextRank, (void *)&toSend, sizeof(int));
+		ReadFromCommRank(comm, prevRank, (void *)&received, sizeof(int));
+
+		if(received != LOOP_ONE_FLAG)
+			printf("ERROR IN DOUBLE LOOP... GOT SOMETHING OTHER THAN LOOP_ONE_FLAG FROM LAST RANK\n");
+
+		toSend = LOOP_TWO_FLAG;
+
+		WriteToCommRank(comm, nextRank, (void *)&toSend, sizeof(int));
+		ReadFromCommRank(comm, prevRank, (void *)&received, sizeof(int));
+
+		if(received != LOOP_TWO_FLAG)
+			printf("ERROR IN DOUBLE LOOP... GOT SOMETHING OTHER THAN LOOP_TWO_FLAG FROM LAST RANK\n");
+	}
+	else
+	{
+		toSend = LOOP_ONE_FLAG;
+		ReadFromCommRank(comm, prevRank, (void *)&received, sizeof(int));
+		WriteToCommRank(comm, nextRank, (void *)&toSend, sizeof(int));
+
+		toSend = LOOP_TWO_FLAG;
+		ReadFromCommRank(comm, prevRank, (void *)&received, sizeof(int));
+		WriteToCommRank(comm, nextRank, (void *)&toSend, sizeof(int));
+	}
+}
+
+void WriteToCommRank(MPI_Comm comm, int rank, void *buf, size_t count)
+{
+	int interface;
+
+	if(comm == MPI_COMM_WORLD)
+	{
+		interface = MPI_Rank_sockets[rank];
+	}
+	else
+	{
+		for(int i = 0; i < MPI_Num_user_comms; i++)
+		{
+			if(MPI_User_comms[i].id == comm)
+			{
+				interface = MPI_User_comms[i].rankSockets[rank];
+				break;
+			}
+		}
+	}
+
+	int bytesWritten = write(interface, buf, count);
+
+	while(bytesWritten < count)
+		bytesWritten += write(interface, buf + bytesWritten, count - bytesWritten);
+}
+
+void ReadFromCommRank(MPI_Comm comm, int rank, void *buf, size_t count)
+{
+	int interface;
+
+	if(comm == MPI_COMM_WORLD)
+	{
+		interface = MPI_Rank_sockets[rank];
+	}
+	else
+	{
+		for(int i = 0; i < MPI_Num_user_comms; i++)
+		{
+			if(MPI_User_comms[i].id == comm)
+			{
+				interface = MPI_User_comms[i].rankSockets[rank];
+				break;
+			}
+		}
+	}
+
+	int bytesRead = read(interface, buf, count);
+
+	while(bytesRead < count)
+		bytesRead += read(interface, buf + bytesRead, count - bytesRead);
 }
