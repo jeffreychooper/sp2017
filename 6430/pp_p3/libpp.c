@@ -648,8 +648,118 @@ int MPI_Comm_dup(MPI_Comm comm, MPI_Comm *newComm)
 	return MPI_SUCCESS;
 }
 
+// TODO: I'm doing this the lazy way... root will just select on the others and put their info in the buffer as it comes
 int MPI_Gather(void *sendbuf, int sendcnt, MPI_Datatype sendtype, void *recvbuf, int recvcnt, MPI_Datatype recvtype, int root, MPI_Comm comm)
 {
+	if(MPI_World_rank == root)
+	{
+		// TODO: really bad way of doing this...
+		int typeSize;
+		if(recvtype == MPI_CHAR)
+			typeSize = sizeof(char);
+		else if(recvtype == MPI_INT)
+			typeSize = sizeof(int);
+
+		int bytesToRead = recvcnt * typeSize;
+
+		for(int i = 0; i < MPI_World_size; i++)
+		{
+			int senderRank = -1;
+
+			if(i != root)
+			{
+				while(MPI_Rank_sockets[i] == -1)
+				{
+					while(ProgressEngine(MPI_My_accept_socket))
+						;
+				}
+				
+				ReadFromCommRank(comm, i, (void *)&senderRank, sizeof(int));
+				ReadFromCommRank(comm, i, recvbuf + (senderRank * bytesToRead), bytesToRead);
+			}
+		}
+
+		// move the root's own info over
+		memcpy(recvbuf + (root * bytesToRead), sendbuf, bytesToRead);
+	}
+	else
+	{
+		// TODO: fix this section if we do anything other than duping comms
+		// if no connection to the destination...
+		if(MPI_Rank_sockets[root] == -1)
+		{
+			int rc;
+
+			// tell ppexec I need to connect to someone
+			int connectFlag = CONNECT_FLAG;
+			write(MPI_Control_socket, (void *)&connectFlag, sizeof(int));
+
+			// tell ppexec which comm I'm talking about
+			int commWorld = MPI_COMM_WORLD;
+			write(MPI_Control_socket, (void *)&commWorld, sizeof(int));
+
+			// tell ppexec which rank I want to connect to
+			write(MPI_Control_socket, (void *)&root, sizeof(int));
+
+			// get the host and port back from ppexec
+			char destHost[HOSTNAME_LENGTH];
+			int destPort;
+
+			read(MPI_Control_socket, (void *)&destHost, HOSTNAME_LENGTH * sizeof(char));
+			read(MPI_Control_socket, (void *)&destPort, sizeof(int));
+
+			// connect to dest
+			struct sockaddr_in listener;
+			struct hostent *hp;
+			int optVal = 1;
+
+			hp = gethostbyname((char *)&destHost);
+
+			if(!hp)
+			{
+				printf("%s : %s\n", "MPI_Send gethostbyname", strerror(errno));
+				exit(1);
+			}
+
+			memset((void *)&listener, '0', sizeof(listener));
+			memcpy((void *)&listener.sin_addr, (void *)hp->h_addr, hp->h_length);
+			listener.sin_family = hp->h_addrtype;
+			listener.sin_port = htons(destPort);
+
+			MPI_Rank_sockets[root] = socket(AF_INET, SOCK_STREAM, 0);
+			ErrorCheck(MPI_Rank_sockets[root], "MPI_Send socket");
+
+			setsockopt(MPI_Rank_sockets[root], IPPROTO_TCP, TCP_NODELAY, (char *)&optVal, sizeof(optVal));
+
+			rc = connect(MPI_Rank_sockets[root], (struct sockaddr *)&listener, sizeof(listener));
+			ErrorCheck(rc, "MPI_Send connect");
+
+			// tell the dest which global rank I am
+			write(MPI_Rank_sockets[root], (void *)&MPI_World_rank, sizeof(int));
+
+			// TODO: this will also need to change
+			// propagate changes to other comms
+			for(int i = 0; i < MPI_Num_user_comms; i++)
+			{
+				if(MPI_User_comms[i].parentID == MPI_COMM_WORLD)
+				{
+					MPI_User_comms[i].rankSockets[root] = MPI_Rank_sockets[root];
+				}
+			}
+		}
+
+		int typeSize;
+		if(sendtype == MPI_CHAR)
+			typeSize = sizeof(char);
+		else if(sendtype == MPI_INT)
+			typeSize = sizeof(int);
+
+		int bytesToWrite = sendcnt * typeSize;
+
+		WriteToCommRank(comm, root, (void *)&MPI_World_rank, sizeof(int));
+		WriteToCommRank(comm, root, sendbuf, bytesToWrite);
+	}
+
 	return MPI_SUCCESS;
 }
 
