@@ -774,8 +774,47 @@ int MPI_Gather(void *sendbuf, int sendcnt, MPI_Datatype sendtype, void *recvbuf,
 	return MPI_SUCCESS;
 }
 
+// TODO: lazy way....
 int MPI_Bcast(void *buffer, int count, MPI_Datatype datatype, int root, MPI_Comm comm)
 {
+	int typeSize;
+	if(datatype == MPI_CHAR)
+		typeSize = sizeof(char);
+	else if(datatype == MPI_INT)
+		typeSize = sizeof(int);
+
+	int bytesToCommunicate = count * typeSize;
+
+	if(MPI_World_rank == root)
+	{
+		for(int i = 0; i < MPI_World_size; i++)
+		{
+			if(i != root)
+			{
+				// make sure we're connected
+				if(!ConnectedToCommRank(comm, i))
+					ConnectToCommRank(comm, i);
+
+				// send the info over
+				WriteToCommRank(comm, i, buffer, bytesToCommunicate);
+			}
+		}
+	}
+	else
+	{
+		// make sure we're connected to root
+		while(!ConnectedToCommRank(comm, root))
+		{
+			while(ProgressEngine(MPI_My_accept_socket))
+				;
+		}
+
+		// wait for root to give us what we're waiting for
+		ReadFromCommRank(comm, root, buffer, bytesToCommunicate);
+	}
+
+	DoubleLoop(comm, MPI_World_rank, MPI_World_size);
+
 	return MPI_SUCCESS;
 }
 
