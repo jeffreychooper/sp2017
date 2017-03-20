@@ -55,6 +55,8 @@ int ProgressEngine(int blockingSocket);		// sometimes, we'll want to block on so
 void DoubleLoop(MPI_Comm comm, int rank, int size);
 void WriteToCommRank(MPI_Comm comm, int rank, void *buf, size_t count);
 void ReadFromCommRank(MPI_Comm comm, int rank, void *buf, size_t count);
+int ConnectedToCommRank(MPI_Comm comm, int dest);
+void ConnectToCommRank(MPI_Comm comm, int dest);
 
 int MPI_Init(int *argc, char ***argv)
 {
@@ -652,6 +654,12 @@ int MPI_Comm_dup(MPI_Comm comm, MPI_Comm *newComm)
 // TODO: I'm doing this the lazy way... root will just select on the others and put their info in the buffer as it comes
 int MPI_Gather(void *sendbuf, int sendcnt, MPI_Datatype sendtype, void *recvbuf, int recvcnt, MPI_Datatype recvtype, int root, MPI_Comm comm)
 {
+	#if DEBUG
+	int debug = 0;
+	while(!debug)
+		;
+	#endif
+
 	if(MPI_World_rank == root)
 	{
 		// TODO: really bad way of doing this...
@@ -948,7 +956,7 @@ int ProgressEngine(int blockingSocket)
 void DoubleLoop(MPI_Comm comm, int rank, int size)
 {
 	int toSend;
-	int received;
+	int received = 0;
 	int prevRank = rank - 1;
 	int nextRank = rank + 1;
 
@@ -960,24 +968,57 @@ void DoubleLoop(MPI_Comm comm, int rank, int size)
 
 	if(rank == 0)
 	{
-		toSend = LOOP_ONE_FLAG;
+		// check if we're connected to nextRank
+		if(!ConnectedToCommRank(comm, nextRank))
+		{
+			ConnectToCommRank(comm, nextRank);
+		}
 
+		// check if we're connected to prevRank
+		while(!ConnectedToCommRank(comm, prevRank))
+		{
+			while(ProgressEngine(MPI_My_accept_socket))
+				;
+		}
+
+		toSend = LOOP_ONE_FLAG;
+	
 		WriteToCommRank(comm, nextRank, (void *)&toSend, sizeof(int));
-		ReadFromCommRank(comm, prevRank, (void *)&received, sizeof(int));
+		while(received != LOOP_ONE_FLAG)
+			ReadFromCommRank(comm, prevRank, (void *)&received, sizeof(int));
 
 		toSend = LOOP_TWO_FLAG;
 
 		WriteToCommRank(comm, nextRank, (void *)&toSend, sizeof(int));
-		ReadFromCommRank(comm, prevRank, (void *)&received, sizeof(int));
+
+		while(received != LOOP_TWO_FLAG)
+			ReadFromCommRank(comm, prevRank, (void *)&received, sizeof(int));
 	}
 	else
 	{
+		// check if we're connected to prevRank
+		while(!ConnectedToCommRank(comm, prevRank))
+		{
+			while(ProgressEngine(MPI_My_accept_socket))
+				;
+		}
+
+		// check if we're connected to nextRank
+		if(!ConnectedToCommRank(comm, nextRank))
+		{
+			ConnectToCommRank(comm, nextRank);
+		}
+
 		toSend = LOOP_ONE_FLAG;
-		ReadFromCommRank(comm, prevRank, (void *)&received, sizeof(int));
+		while(received != LOOP_ONE_FLAG)
+			ReadFromCommRank(comm, prevRank, (void *)&received, sizeof(int));
+
 		WriteToCommRank(comm, nextRank, (void *)&toSend, sizeof(int));
 
 		toSend = LOOP_TWO_FLAG;
-		ReadFromCommRank(comm, prevRank, (void *)&received, sizeof(int));
+		while(received != LOOP_TWO_FLAG)
+			ReadFromCommRank(comm, prevRank, (void *)&received, sizeof(int));
+
 		WriteToCommRank(comm, nextRank, (void *)&toSend, sizeof(int));
 	}
 }
@@ -996,7 +1037,8 @@ void WriteToCommRank(MPI_Comm comm, int rank, void *buf, size_t count)
 		{
 			if(MPI_User_comms[i].id == comm)
 			{
-				interface = MPI_User_comms[i].rankSockets[rank];
+				// TODO: fix this... like readfromcommrank
+				interface = MPI_Rank_sockets[rank];
 				break;
 			}
 		}
@@ -1022,7 +1064,8 @@ void ReadFromCommRank(MPI_Comm comm, int rank, void *buf, size_t count)
 		{
 			if(MPI_User_comms[i].id == comm)
 			{
-				interface = MPI_User_comms[i].rankSockets[rank];
+				// TODO: fix this... instead of just using world
+				interface = MPI_Rank_sockets[rank];
 				break;
 			}
 		}
@@ -1032,4 +1075,72 @@ void ReadFromCommRank(MPI_Comm comm, int rank, void *buf, size_t count)
 
 	while(bytesRead < count)
 		bytesRead += read(interface, buf + bytesRead, count - bytesRead);
+}
+
+int ConnectedToCommRank(MPI_Comm comm, int dest)
+{
+	return MPI_Rank_sockets[dest] != -1;
+}
+
+void ConnectToCommRank(MPI_Comm comm, int dest)
+{
+	int rc;
+
+	// TODO: fix this section if we do anything other than duping comms
+	// tell ppexec I need to connect to someone
+	int connectFlag = CONNECT_FLAG;
+	write(MPI_Control_socket, (void *)&connectFlag, sizeof(int));
+
+	// tell ppexec which comm I'm talking about
+	int commWorld = MPI_COMM_WORLD;
+	write(MPI_Control_socket, (void *)&commWorld, sizeof(int));
+
+	// tell ppexec which rank I want to connect to
+	write(MPI_Control_socket, (void *)&dest, sizeof(int));
+
+	// get the host and port back from ppexec
+	char destHost[HOSTNAME_LENGTH];
+	int destPort;
+
+	read(MPI_Control_socket, (void *)&destHost, HOSTNAME_LENGTH * sizeof(char));
+	read(MPI_Control_socket, (void *)&destPort, sizeof(int));
+
+	// connect to dest
+	struct sockaddr_in listener;
+	struct hostent *hp;
+	int optVal = 1;
+
+	hp = gethostbyname((char *)&destHost);
+
+	if(!hp)
+	{
+		printf("%s : %s\n", "MPI_Send gethostbyname", strerror(errno));
+		exit(1);
+	}
+
+	memset((void *)&listener, '0', sizeof(listener));
+	memcpy((void *)&listener.sin_addr, (void *)hp->h_addr, hp->h_length);
+	listener.sin_family = hp->h_addrtype;
+	listener.sin_port = htons(destPort);
+
+	MPI_Rank_sockets[dest] = socket(AF_INET, SOCK_STREAM, 0);
+	ErrorCheck(MPI_Rank_sockets[dest], "MPI_Send socket");
+
+	setsockopt(MPI_Rank_sockets[dest], IPPROTO_TCP, TCP_NODELAY, (char *)&optVal, sizeof(optVal));
+
+	rc = connect(MPI_Rank_sockets[dest], (struct sockaddr *)&listener, sizeof(listener));
+	ErrorCheck(rc, "MPI_Send connect");
+
+	// tell the dest which global rank I am
+	write(MPI_Rank_sockets[dest], (void *)&MPI_World_rank, sizeof(int));
+
+	// TODO: this will also need to change
+	// propagate changes to other comms
+	for(int i = 0; i < MPI_Num_user_comms; i++)
+	{
+		if(MPI_User_comms[i].parentID == MPI_COMM_WORLD)
+		{
+			MPI_User_comms[i].rankSockets[dest] = MPI_Rank_sockets[dest];
+		}
+	}
 }
