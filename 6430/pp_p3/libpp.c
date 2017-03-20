@@ -644,6 +644,7 @@ int MPI_Comm_dup(MPI_Comm comm, MPI_Comm *newComm)
 	*newComm = MPI_User_comms[newCommIndex].id;
 
 	// block to make sure everyone is done
+	DoubleLoop(*newComm, MPI_User_comms[newCommIndex].rank, MPI_User_comms[newCommIndex].size);
 
 	return MPI_SUCCESS;
 }
@@ -673,7 +674,7 @@ int MPI_Gather(void *sendbuf, int sendcnt, MPI_Datatype sendtype, void *recvbuf,
 					while(ProgressEngine(MPI_My_accept_socket))
 						;
 				}
-				
+
 				ReadFromCommRank(comm, i, (void *)&senderRank, sizeof(int));
 				ReadFromCommRank(comm, i, recvbuf + (senderRank * bytesToRead), bytesToRead);
 			}
@@ -759,6 +760,8 @@ int MPI_Gather(void *sendbuf, int sendcnt, MPI_Datatype sendtype, void *recvbuf,
 		WriteToCommRank(comm, root, (void *)&MPI_World_rank, sizeof(int));
 		WriteToCommRank(comm, root, sendbuf, bytesToWrite);
 	}
+
+	DoubleLoop(MPI_COMM_WORLD, MPI_World_rank, MPI_World_size);
 
 	return MPI_SUCCESS;
 }
@@ -962,16 +965,10 @@ void DoubleLoop(MPI_Comm comm, int rank, int size)
 		WriteToCommRank(comm, nextRank, (void *)&toSend, sizeof(int));
 		ReadFromCommRank(comm, prevRank, (void *)&received, sizeof(int));
 
-		if(received != LOOP_ONE_FLAG)
-			printf("ERROR IN DOUBLE LOOP... GOT SOMETHING OTHER THAN LOOP_ONE_FLAG FROM LAST RANK\n");
-
 		toSend = LOOP_TWO_FLAG;
 
 		WriteToCommRank(comm, nextRank, (void *)&toSend, sizeof(int));
 		ReadFromCommRank(comm, prevRank, (void *)&received, sizeof(int));
-
-		if(received != LOOP_TWO_FLAG)
-			printf("ERROR IN DOUBLE LOOP... GOT SOMETHING OTHER THAN LOOP_TWO_FLAG FROM LAST RANK\n");
 	}
 	else
 	{

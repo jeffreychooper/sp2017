@@ -12,7 +12,7 @@ libpp.a: libpp.c
 	ar rvf libpp.a libpp.o
 
 p3_tester: libpp.a
-	$(CC) $(DEBUGFLAGS) -o p3_tester p3_tester.c $(PPLIBS)
+	$(CC) $(CFLAGS) -o p3_tester p3_tester.c $(PPLIBS)
 
 clean:
 	rm -f ppexec *.o *.a p3_tester
