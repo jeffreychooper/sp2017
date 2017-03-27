@@ -1,0 +1,93 @@
+
+                        Operating Systems Design
+                              Spring 2017
+                               Project 4
+
+
+turnin id:  osd_p4
+
+
+DO NOT print arp messages (p3) for this project.
+
+
+DNS:
+    In this project, we will permit the hosts and routers to look into
+    data structures that map a hostname to an ipaddr.  We will assume
+    that this info was obtained via some DNS protocol.
+
+
+Routing for IP:
+
+    Develop a route cmd:
+        route  h1  host_ip my_mac_to_send_on               # route to one host
+            route  h1  2.1  101
+            ## we will probably not use this one, but I put it here solely
+            ##    for completeness about what it typically supported in a
+            ##    real network
+        route  h1  net_ip  my_mac_to_send_on               # route to attached net
+            route  h1  2    101
+        route  h1  net_ip  my_mac_to_send_on  gateway_ip   # route to remote net
+            route  h1  2    101  1.2
+        route  h1  def     my_mac_to_send_on  gateway_ip   # default route
+            route  h1  def  101  1.2
+
+    These examples create route table entries at host h1.
+    Note that each route cmd is performed on the route table on each
+    specified host after all hosts and switches are up.  They are sent
+    from the interpreter to the hosts/routers as if they were commands
+    typed in at the console.
+
+
+IP layer:
+
+    In this project, we will add support for simple routing which is
+    required for both IP and some ICMP operations.  We will not support
+    fragmentation, so IP and ICMP are largely the same for us.
+
+    iptest  from_host_or_router  to_host_or_router_or_ipaddr
+                # iptest causes a ping to be sent from the specified host
+                # there is no ping reply
+                # more comments below
+    trtest  from_host_or_router  to_host_or_router_or_ipaddr payload
+                # traceroute test 
+                # causes a traceroute to be sent from the specified host
+                # there is no traceroute reply
+                # more comments below
+
+        If it can not be determined how to send the message to the specified
+        hostname or ipaddr, simply print:
+            my_hostname:  **** no route to host: hostname_or_ipaddr
+
+        Otherwise:
+            Every host/router at which either a ping or traceroute message
+            originates should print an informative message.
+                # my_hostname: sent ping to to_hostname
+                # my_hostname: sent traceroute to to_hostname
+            Every host/router that is the *destination* of a ping should print
+            an informative message.
+                # my_hostname: received ping from xx_hostname
+            Every host that is the *destination* of a traceroute, should print
+            an informative message.
+                # my_hostname: received traceroute from xx_hostname; route:
+                #    h1 r1 r2 r3 .... rn h2
+        Format of IP-level message:
+            len            1 byte   (len of entire msg)
+            ttl            1 byte   
+                # start at 6; decrement by hosts (not switches); discard at 0
+            protocol       1 byte   
+                # encapsulated protocol inside the packet's payload
+                # icmp (iptest/ping, traceroute, etc) (see below)
+            src-ipaddr     2 bytes
+            dest-ipaddr    2 bytes
+            payload
+                # traceroute can collect the actual route taken in its payload
+                # field as it progresses to the final destination
+    
+
+    ICMP protocols:
+        Recall that we used protocol 0 for early testing, and then 1 and 2 for
+        arp request and arp reply, respectively.  In this project, we will add
+        new protocol types for icmp operations:
+
+            ping 3
+            traceroute 4
