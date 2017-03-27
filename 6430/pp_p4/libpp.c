@@ -766,6 +766,33 @@ int MPI_Bcast(void *buffer, int count, MPI_Datatype datatype, int root, MPI_Comm
 	return MPI_SUCCESS;
 }
 
+int MPI_Isend(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm, MPI_Request *request)
+{
+
+
+	return MPI_SUCCESS;
+}
+
+int MPI_Irecv(void *buf, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm, MPI_Request *request)
+{
+
+	return MPI_SUCCESS;
+}
+
+int MPI_Test(MPI_Request *request, int *flag, MPI_Status *status)
+{
+
+
+	return MPI_SUCCESS;
+}
+
+int MPI_Wait(MPI_Request *request, MPI_Status *status)
+{
+
+
+	return MPI_SUCCESS;
+}
+
 void ErrorCheck(int val, char *str)
 {
     if(val < 0)

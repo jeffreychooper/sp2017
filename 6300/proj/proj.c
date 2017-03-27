@@ -6,14 +6,11 @@
 void ErrorCheck(int val, char *str);
 int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile);
 
-int numModules;
-int numNodes;
-int *moduleMapping;
-double *nodeProcessingPower;
-double **linkBandwidth;
-double **linkDelay;
-double *moduleComplexity;
-double **dataDependencyMatrix;
+// beyond the info found in the user provided files we need:
+	// array of links with the number of files traveling over each link currently
+	// array of nodes with the number of modules being executed currently
+	// transfer array... based partially on provided info
+	// execution array... based partially on provided info
 
 int main(int argc, char *argv[])
 {
@@ -54,7 +51,15 @@ void ErrorCheck(int val, char *str)
 
 int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile)
 {
+	// number, ids, and node mappings of modules (map file)
 
+	// computational requirements of modules (task graph)
+
+	// number of dependencies... which modules a node is dependent upon and how much data it needs from the other module (task graph)
+
+	// node processing power (network graph)
+
+	// relevant link bandwidths/static delays... look at dependencies/module to node mappings to decide which links we care about (network graph)
 
 	return 0;
 }
