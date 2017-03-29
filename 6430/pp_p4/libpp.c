@@ -36,17 +36,14 @@ typedef struct
 	int *rankSockets;
 } MPI_Comm_info;
 
-// request id
-// send or receive
-// target fd
-// pointer to next request
 typedef struct
 {
 	int requestID;
 	int type;		// 0 send 1 receive
 	int targetFD;
-	struct MPI_Immediate_request_info* nextInfo;
-} MPI_Immediate_request_info;
+	struct MPI_Request_info* prevInfoPointer;
+	struct MPI_Request_info* nextInfoPointer;
+} MPI_Request_info;
 
 int MPI_World_rank;
 int MPI_World_size;
@@ -62,7 +59,9 @@ int *MPI_Rank_sockets;
 int MPI_Num_user_comms;
 MPI_Comm_info *MPI_User_comms;
 
-
+int MPI_Num_requests = 0;
+MPI_Request_info *MPI_First_request_pointer;
+MPI_Request_info *MPI_Last_request_pointer;
 
 void ErrorCheck(int val, char *str);
 int SetupAcceptSocket();
@@ -72,6 +71,8 @@ void WriteToCommRank(MPI_Comm comm, int rank, void *buf, size_t count);
 void ReadFromCommRank(MPI_Comm comm, int rank, void *buf, size_t count);
 int ConnectedToCommRank(MPI_Comm comm, int dest);
 void ConnectToCommRank(MPI_Comm comm, int dest);
+void AddRequestInfo(int type, int targetFD);	// returns the requestID
+void DeleteRequestInfo(MPI_Request_info *request);
 
 int MPI_Init(int *argc, char ***argv)
 {
@@ -1196,4 +1197,21 @@ void ConnectToCommRank(MPI_Comm comm, int dest)
 			MPI_User_comms[i].rankSockets[dest] = MPI_Rank_sockets[dest];
 		}
 	}
+}
+
+void AddRequestInfo(int type, int targetFD)
+{
+	MPI_Request_info *newRequest = malloc(sizeof(MPI_Request_info));
+
+	if(MPI_Num_requests == 0)
+	{
+		newRequest->requestID = 0;
+		newRequest->prevInfoPointer = NULL;
+		newRequest->nextInfoPointer = NULL;
+	}
+}
+
+void DeleteRequestInfo(MPI_Request_info *request)
+{
+
 }
