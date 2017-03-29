@@ -36,6 +36,18 @@ typedef struct
 	int *rankSockets;
 } MPI_Comm_info;
 
+// request id
+// send or receive
+// target fd
+// pointer to next request
+typedef struct
+{
+	int requestID;
+	int type;		// 0 send 1 receive
+	int targetFD;
+	struct MPI_Immediate_request_info* nextInfo;
+} MPI_Immediate_request_info;
+
 int MPI_World_rank;
 int MPI_World_size;
 char *MPI_Control_host;
@@ -49,6 +61,8 @@ int *MPI_Rank_sockets;
 
 int MPI_Num_user_comms;
 MPI_Comm_info *MPI_User_comms;
+
+
 
 void ErrorCheck(int val, char *str);
 int SetupAcceptSocket();
@@ -768,13 +782,38 @@ int MPI_Bcast(void *buffer, int count, MPI_Datatype datatype, int root, MPI_Comm
 
 int MPI_Isend(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm, MPI_Request *request)
 {
+	// if not connected
+	if(!ConnectedToCommRank(comm, dest))
+	{
+		// connect
+		ConnectToCommRank(comm, dest);
+	}
 
+	// make a note of the fact that the user wants to send something
+
+	// ???????? DO I NEED TO SEND THE FIRST PART OF THE THING BEFORE PE ???????????
+
+	// progress engine DON'T HANG
 
 	return MPI_SUCCESS;
 }
 
 int MPI_Irecv(void *buf, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm, MPI_Request *request)
 {
+	if(source != MPI_ANY_SOURCE)
+	{
+		// while not connected
+		while(!ConnectedToCommRank(comm, source))
+		{
+			// hang on the PE until it's connected
+			while(ProgressEngine(MPI_My_accept_socket))
+				;
+		}
+	}
+
+	// make a note of the fact that the user wants to receive something
+	
+	// progress engine DON'T HANG
 
 	return MPI_SUCCESS;
 }
