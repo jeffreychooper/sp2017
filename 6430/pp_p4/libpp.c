@@ -36,14 +36,16 @@ typedef struct
 	int *rankSockets;
 } MPI_Comm_info;
 
-typedef struct
+typedef struct MPI_Request_info MPI_Request_info;
+
+struct MPI_Request_info
 {
 	int requestID;
 	int type;		// 0 send 1 receive
 	int targetFD;
-	struct MPI_Request_info* prevInfoPointer;
-	struct MPI_Request_info* nextInfoPointer;
-} MPI_Request_info;
+	MPI_Request_info* prevInfoPointer;
+	MPI_Request_info* nextInfoPointer;
+};
 
 int MPI_World_rank;
 int MPI_World_size;
@@ -1208,10 +1210,51 @@ void AddRequestInfo(int type, int targetFD)
 		newRequest->requestID = 0;
 		newRequest->prevInfoPointer = NULL;
 		newRequest->nextInfoPointer = NULL;
+
+		MPI_Num_requests++;
+		MPI_First_request_pointer = newRequest;
+		MPI_Last_request_pointer = newRequest;
 	}
+	else
+	{
+		newRequest->requestID = MPI_Last_request_pointer->requestID + 1;
+		newRequest->prevInfoPointer = MPI_Last_request_pointer;
+		newRequest->nextInfoPointer = NULL;
+
+		MPI_Num_requests++;
+		MPI_Last_request_pointer = newRequest;
+	}
+
+	newRequest->type = type;
+	newRequest->targetFD = targetFD;
 }
 
 void DeleteRequestInfo(MPI_Request_info *request)
 {
+	if(MPI_Num_requests == 1)
+	{
+		free(request);
+		
+		MPI_Num_requests = 0;
+		MPI_First_request_pointer = NULL;
+		MPI_Last_request_pointer = NULL;
+	}
+	else
+	{
+		request->prevInfoPointer->nextInfoPointer = request->nextInfoPointer;
+		request->nextInfoPointer->prevInfoPointer = request->prevInfoPointer;
+		free(request);
 
+		MPI_Num_requests--;
+		
+		if(MPI_First_request_pointer == request)
+		{
+			MPI_First_request_pointer = request->nextInfoPointer;
+		}
+
+		if(MPI_Last_request_pointer == request)
+		{
+			MPI_First_request_pointer = request->prevInfoPointer;
+		}
+	}
 }
