@@ -27,6 +27,9 @@
 #define LOOP_TWO_FLAG 7
 #define GATHER_ROOT_READY_FLAG 8
 
+#define REQUEST_SEND_TYPE 0
+#define REQUEST_RECV_TYPE 1
+
 typedef struct 
 {
 	MPI_Comm id;
@@ -73,7 +76,8 @@ void WriteToCommRank(MPI_Comm comm, int rank, void *buf, size_t count);
 void ReadFromCommRank(MPI_Comm comm, int rank, void *buf, size_t count);
 int ConnectedToCommRank(MPI_Comm comm, int dest);
 void ConnectToCommRank(MPI_Comm comm, int dest);
-void AddRequestInfo(int type, int targetFD);	// returns the requestID
+int GetFDForCommRank(MPI_Comm comm, int dest);
+int AddRequestInfo(int type, int targetFD);			// returns the id of the request
 void DeleteRequestInfo(MPI_Request_info *request);
 
 int MPI_Init(int *argc, char ***argv)
@@ -785,6 +789,30 @@ int MPI_Bcast(void *buffer, int count, MPI_Datatype datatype, int root, MPI_Comm
 
 int MPI_Isend(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm, MPI_Request *request)
 {
+	int commIndex;
+
+	// validate args
+	if(dest >= MPI_World_size)
+		return MPI_ERR_RANK;
+
+	if(comm != MPI_COMM_WORLD)
+	{
+		for(int i = 0; i < MPI_Num_user_comms; i++)
+		{
+			if(MPI_User_comms[i].id == comm)
+			{
+				commIndex = i;
+				break;
+			}
+		}
+
+		if(commIndex == -1)
+			return MPI_ERR_COMM;
+	}
+
+	if(tag < 0 && tag != MPI_ANY_TAG)
+		return MPI_ERR_TAG;
+
 	// if not connected
 	if(!ConnectedToCommRank(comm, dest))
 	{
@@ -793,10 +821,27 @@ int MPI_Isend(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MP
 	}
 
 	// make a note of the fact that the user wants to send something
+	int requestID = AddRequestInfo(REQUEST_SEND_TYPE, GetFDForCommRank(comm, dest));
+	*request = requestID;
 
-	// ???????? DO I NEED TO SEND THE FIRST PART OF THE THING BEFORE PE ???????????
+	// tell dest we're sending, the comm we're using, our rank, and tag...
+	int sendFlag = SEND_FLAG;
+	WriteToCommRank(comm, dest, (void *)&sendFlag, sizeof(int));
+	WriteToCommRank(comm, dest, (void *)&comm, sizeof(MPI_Comm));
+
+	if(comm == MPI_COMM_WORLD)
+		WriteToCommRank(comm, dest, (void *)&MPI_World_rank, sizeof(int));
+	else
+		WriteToCommRank(comm, dest, (void *)&MPI_User_comms[commIndex].rank, sizeof(int));
+
+	WriteToCommRank(comm, dest, (void *)&tag, sizeof(int));
+
 
 	// progress engine DON'T HANG
+	if(comm == MPI_COMM_WORLD)
+		ProgressEngine(MPI_Rank_sockets[dest]);
+	else
+		ProgressEngine(MPI_User_comms[commIndex].rankSockets[dest]);
 
 	return MPI_SUCCESS;
 }
@@ -1201,7 +1246,31 @@ void ConnectToCommRank(MPI_Comm comm, int dest)
 	}
 }
 
-void AddRequestInfo(int type, int targetFD)
+int GetFDForCommRank(MPI_Comm comm, int dest)
+{
+	int interface;
+
+	if(comm == MPI_COMM_WORLD)
+	{
+		interface = MPI_Rank_sockets[dest];
+	}
+	else
+	{
+		for(int i = 0; i < MPI_Num_user_comms; i++)
+		{
+			if(MPI_User_comms[i].id == comm)
+			{
+				// TODO: fix this... instead of just using world
+				interface = MPI_Rank_sockets[dest];
+				break;
+			}
+		}
+	}
+
+	return interface;
+}
+
+int AddRequestInfo(int type, int targetFD)
 {
 	MPI_Request_info *newRequest = malloc(sizeof(MPI_Request_info));
 
@@ -1227,6 +1296,8 @@ void AddRequestInfo(int type, int targetFD)
 
 	newRequest->type = type;
 	newRequest->targetFD = targetFD;
+
+	return newRequest->requestID;
 }
 
 void DeleteRequestInfo(MPI_Request_info *request)
