@@ -30,6 +30,8 @@
 #define REQUEST_SEND_TYPE 0
 #define REQUEST_RECV_TYPE 1
 
+#define PE_DONT_HANG -1
+
 typedef struct 
 {
 	MPI_Comm id;
@@ -836,12 +838,8 @@ int MPI_Isend(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MP
 
 	WriteToCommRank(comm, dest, (void *)&tag, sizeof(int));
 
-
 	// progress engine DON'T HANG
-	if(comm == MPI_COMM_WORLD)
-		ProgressEngine(MPI_Rank_sockets[dest]);
-	else
-		ProgressEngine(MPI_User_comms[commIndex].rankSockets[dest]);
+	ProgressEngine(PE_DONT_HANG);
 
 	return MPI_SUCCESS;
 }
@@ -860,8 +858,10 @@ int MPI_Irecv(void *buf, int count, MPI_Datatype datatype, int source, int tag, 
 	}
 
 	// make a note of the fact that the user wants to receive something
+	int requestID = AddRequestInfo(REQUEST_RECV_TYPE, GetFDForCommRank(comm, source));
 	
 	// progress engine DON'T HANG
+	ProgressEngine(PE_DONT_HANG);
 
 	return MPI_SUCCESS;
 }
