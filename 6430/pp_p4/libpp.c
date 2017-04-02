@@ -1,5 +1,6 @@
 // TODO: need to adjust send and receive... make a linked list pointing to buffers where I store things to send and receive... works better with progress engine
 // TODO: progress engine might need to be expanded... get info from it about whether who sent us what message
+// TODO: I think non-blocking receive is broken for MPI_ANY_SOURCE
 #include "mpi.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -847,11 +848,7 @@ int MPI_Isend(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MP
 	// progress engine DON'T HANG
 	int peResult = ProgressEngine(PE_DONT_HANG);
 
-	if(peResult == 0)
-	{
-		// TODO: this shit
-		printf("Isend's receiver is ready\n");
-	}
+	// TODO: if I allow PE to successfully return when not hanging, I'll need to do work here if successful
 
 	return MPI_SUCCESS;
 }
@@ -875,25 +872,96 @@ int MPI_Irecv(void *buf, int count, MPI_Datatype datatype, int source, int tag, 
 	// progress engine DON'T HANG
 	int peResult = ProgressEngine(PE_DONT_HANG);
 
-	// TODO: this shit
-	if(peResult == 0)
-	{
-		printf("Irecv's sender sent a flag saying it's ready\n");
-	}
+	// TODO: if I allow PE to successfully return when not hanging, I'll need to do work here if successful
 
 	return MPI_SUCCESS;
 }
 
+// TODO: I think one of the tests requires this to work....... if so, just lazily treat it like a wait
 int MPI_Test(MPI_Request *request, int *flag, MPI_Status *status)
 {
+	int peResult = ProgressEngine(PE_DONT_HANG);
 
+	// TODO: if I allow PE to successfully return when not hanging, I'll need to do work here if successful
+
+	*flag = 0;
 
 	return MPI_SUCCESS;
 }
 
 int MPI_Wait(MPI_Request *request, MPI_Status *status)
 {
+	MPI_Request_info *requestInfo = MPI_First_request_pointer;
+	
+	while(requestInfo)
+	{
+		if(requestInfo->requestID == *request)
+			break;
 
+		requestInfo = requestInfo->nextInfoPointer;
+	}
+
+	while(ProgressEngine(requestInfo->targetFD))
+		;
+
+	if(requestInfo->type == REQUEST_SEND_TYPE)
+	{
+		int typeSize;
+
+		if(requestInfo->datatype == MPI_CHAR)
+			typeSize = sizeof(char);
+		else if(requestInfo->datatype == MPI_INT)
+			typeSize = sizeof(int);
+
+		int bytesToWrite = requestInfo->count * typeSize;
+
+		WriteToCommRank(requestInfo->comm, requestInfo->other, requestInfo->buf, bytesToWrite);
+	}
+	else if(requestInfo->type == REQUEST_RECV_TYPE)
+	{
+		// TODO: just throws away messages on a comm it isn't expecting
+		int senderComm;
+
+		while(senderComm != requestInfo->comm);
+		{
+			int senderFlag;
+			while(senderFlag != SEND_FLAG)
+				ReadFromCommRank(requestInfo->comm, requestInfo->other, (void *)&senderFlag, sizeof(int));
+
+			ReadFromCommRank(requestInfo->comm, requestInfo->other, (void *)&senderComm, sizeof(int));
+		}
+
+		int senderSource;
+		ReadFromCommRank(requestInfo->comm, requestInfo->other, (void *)&senderSource, sizeof(int));
+
+		int senderTag;
+		ReadFromCommRank(requestInfo->comm, requestInfo->other, (void *)&senderTag, sizeof(int));
+
+		status->MPI_SOURCE = senderSource;
+		status->MPI_TAG = senderTag;
+
+		if(requestInfo->tag == MPI_ANY_TAG || senderTag == requestInfo->tag)
+		{
+			int readyFlag = RECV_READY_FLAG;
+			WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&readyFlag, sizeof(int));
+
+			int typeSize;
+
+			if(requestInfo->datatype == MPI_CHAR)
+				typeSize = sizeof(char);
+			else if(requestInfo->datatype == MPI_INT)
+				typeSize = sizeof(int);
+
+			int bytesToRead = requestInfo->count * typeSize;
+
+			ReadFromCommRank(requestInfo->comm, requestInfo->other, requestInfo->buf, bytesToRead);
+		}
+		else
+		{
+			status->MPI_ERROR = MPI_ERR_TAG;
+			return MPI_ERR_TAG;
+		}
+	}
 
 	return MPI_SUCCESS;
 }
@@ -1099,7 +1167,7 @@ int ProgressEngine(int blockingSocket)
 	}
 
 	// if we got this far, assume there was no specific task we're working on
-	return 1;
+	return -1;
 }
 
 // TODO: this is a stupid way of doing this... if the people we're receiving from aren't also in DoubleLoop, it's all wrong...
