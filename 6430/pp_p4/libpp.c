@@ -48,6 +48,12 @@ struct MPI_Request_info
 	int requestID;
 	int type;		// 0 send 1 receive
 	int targetFD;
+	void *buf;
+	int count;
+	MPI_Datatype datatype;
+	int other;
+	int tag;
+	MPI_Comm comm;
 	MPI_Request_info* prevInfoPointer;
 	MPI_Request_info* nextInfoPointer;
 };
@@ -79,7 +85,7 @@ void ReadFromCommRank(MPI_Comm comm, int rank, void *buf, size_t count);
 int ConnectedToCommRank(MPI_Comm comm, int dest);
 void ConnectToCommRank(MPI_Comm comm, int dest);
 int GetFDForCommRank(MPI_Comm comm, int dest);
-int AddRequestInfo(int type, int targetFD);			// returns the id of the request
+int AddRequestInfo(int type, int targetFD, void *buf, int count, MPI_Datatype datatype, int other, int tag, MPI_Comm comm);		// returns the requestID
 void DeleteRequestInfo(MPI_Request_info *request);
 
 int MPI_Init(int *argc, char ***argv)
@@ -823,7 +829,7 @@ int MPI_Isend(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MP
 	}
 
 	// make a note of the fact that the user wants to send something
-	int requestID = AddRequestInfo(REQUEST_SEND_TYPE, GetFDForCommRank(comm, dest));
+	int requestID = AddRequestInfo(REQUEST_SEND_TYPE, GetFDForCommRank(comm, dest), buf, count, datatype, dest, tag, comm);
 	*request = requestID;
 
 	// tell dest we're sending, the comm we're using, our rank, and tag...
@@ -839,7 +845,13 @@ int MPI_Isend(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MP
 	WriteToCommRank(comm, dest, (void *)&tag, sizeof(int));
 
 	// progress engine DON'T HANG
-	ProgressEngine(PE_DONT_HANG);
+	int peResult = ProgressEngine(PE_DONT_HANG);
+
+	if(peResult == 0)
+	{
+		// TODO: this shit
+		printf("Isend's receiver is ready\n");
+	}
 
 	return MPI_SUCCESS;
 }
@@ -858,10 +870,16 @@ int MPI_Irecv(void *buf, int count, MPI_Datatype datatype, int source, int tag, 
 	}
 
 	// make a note of the fact that the user wants to receive something
-	int requestID = AddRequestInfo(REQUEST_RECV_TYPE, GetFDForCommRank(comm, source));
+	int requestID = AddRequestInfo(REQUEST_RECV_TYPE, GetFDForCommRank(comm, source), buf, count, datatype, source, tag, comm);
 	
 	// progress engine DON'T HANG
-	ProgressEngine(PE_DONT_HANG);
+	int peResult = ProgressEngine(PE_DONT_HANG);
+
+	// TODO: this shit
+	if(peResult == 0)
+	{
+		printf("Irecv's sender sent a flag saying it's ready\n");
+	}
 
 	return MPI_SUCCESS;
 }
@@ -998,6 +1016,36 @@ int ProgressEngine(int blockingSocket)
 
 					if(requestFlag == RECV_READY_FLAG)
 					{
+						MPI_Request_info *currentRequest = MPI_First_request_pointer;
+
+						while(currentRequest)
+						{
+							if(currentRequest->targetFD == MPI_Rank_sockets[i])
+							{
+								DeleteRequestInfo(currentRequest);
+								break;
+							}
+
+							currentRequest = currentRequest->nextInfoPointer;
+						}
+
+						return 0;
+					}
+					else if(requestFlag == SEND_FLAG)
+					{
+						MPI_Request_info *currentRequest = MPI_First_request_pointer;
+
+						while(currentRequest)
+						{
+							if(currentRequest->targetFD == MPI_Rank_sockets[i])
+							{
+								DeleteRequestInfo(currentRequest);
+								break;
+							}
+
+							currentRequest = currentRequest->nextInfoPointer;
+						}
+
 						return 0;
 					}
 				}
@@ -1005,6 +1053,7 @@ int ProgressEngine(int blockingSocket)
 		}
 		else
 		{
+			// TODO: here where we aren't waiting for a specific socket, I could handle Isends/Irecvs that are ready...
 			struct timeval tv;
 			tv.tv_sec = 0;
 
@@ -1050,7 +1099,7 @@ int ProgressEngine(int blockingSocket)
 	}
 
 	// if we got this far, assume there was no specific task we're working on
-	return 0;
+	return 1;
 }
 
 // TODO: this is a stupid way of doing this... if the people we're receiving from aren't also in DoubleLoop, it's all wrong...
@@ -1270,7 +1319,7 @@ int GetFDForCommRank(MPI_Comm comm, int dest)
 	return interface;
 }
 
-int AddRequestInfo(int type, int targetFD)
+int AddRequestInfo(int type, int targetFD, void *buf, int count, MPI_Datatype datatype, int other, int tag, MPI_Comm comm)
 {
 	MPI_Request_info *newRequest = malloc(sizeof(MPI_Request_info));
 
@@ -1296,6 +1345,12 @@ int AddRequestInfo(int type, int targetFD)
 
 	newRequest->type = type;
 	newRequest->targetFD = targetFD;
+	newRequest->buf = buf;
+	newRequest->count = count;
+	newRequest->datatype = datatype;
+	newRequest->other = other;
+	newRequest->tag = tag;
+	newRequest->comm = comm;
 
 	return newRequest->requestID;
 }
