@@ -798,30 +798,6 @@ int MPI_Bcast(void *buffer, int count, MPI_Datatype datatype, int root, MPI_Comm
 
 int MPI_Isend(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm, MPI_Request *request)
 {
-	int commIndex;
-
-	// validate args
-	if(dest >= MPI_World_size)
-		return MPI_ERR_RANK;
-
-	if(comm != MPI_COMM_WORLD)
-	{
-		for(int i = 0; i < MPI_Num_user_comms; i++)
-		{
-			if(MPI_User_comms[i].id == comm)
-			{
-				commIndex = i;
-				break;
-			}
-		}
-
-		if(commIndex == -1)
-			return MPI_ERR_COMM;
-	}
-
-	if(tag < 0 && tag != MPI_ANY_TAG)
-		return MPI_ERR_TAG;
-
 	// if not connected
 	if(!ConnectedToCommRank(comm, dest))
 	{
@@ -832,23 +808,6 @@ int MPI_Isend(void *buf, int count, MPI_Datatype datatype, int dest, int tag, MP
 	// make a note of the fact that the user wants to send something
 	int requestID = AddRequestInfo(REQUEST_SEND_TYPE, GetFDForCommRank(comm, dest), buf, count, datatype, dest, tag, comm);
 	*request = requestID;
-
-	// tell dest we're sending, the comm we're using, our rank, and tag...
-	int sendFlag = SEND_FLAG;
-	WriteToCommRank(comm, dest, (void *)&sendFlag, sizeof(int));
-	WriteToCommRank(comm, dest, (void *)&comm, sizeof(MPI_Comm));
-
-	if(comm == MPI_COMM_WORLD)
-		WriteToCommRank(comm, dest, (void *)&MPI_World_rank, sizeof(int));
-	else
-		WriteToCommRank(comm, dest, (void *)&MPI_User_comms[commIndex].rank, sizeof(int));
-
-	WriteToCommRank(comm, dest, (void *)&tag, sizeof(int));
-
-	// progress engine DON'T HANG
-	int peResult = ProgressEngine(PE_DONT_HANG);
-
-	// TODO: if I allow PE to successfully return when not hanging, I'll need to do work here if successful
 
 	return MPI_SUCCESS;
 }
@@ -868,23 +827,102 @@ int MPI_Irecv(void *buf, int count, MPI_Datatype datatype, int source, int tag, 
 
 	// make a note of the fact that the user wants to receive something
 	int requestID = AddRequestInfo(REQUEST_RECV_TYPE, GetFDForCommRank(comm, source), buf, count, datatype, source, tag, comm);
+	*request = requestID;
 	
-	// progress engine DON'T HANG
-	int peResult = ProgressEngine(PE_DONT_HANG);
-
-	// TODO: if I allow PE to successfully return when not hanging, I'll need to do work here if successful
-
 	return MPI_SUCCESS;
 }
 
-// TODO: I think one of the tests requires this to work....... if so, just lazily treat it like a wait
+// TODO: currently this just hangs like wait... but sets the flag for success
 int MPI_Test(MPI_Request *request, int *flag, MPI_Status *status)
 {
-	int peResult = ProgressEngine(PE_DONT_HANG);
+	MPI_Request_info *requestInfo = MPI_First_request_pointer;
+	
+	while(requestInfo)
+	{
+		if(requestInfo->requestID == *request)
+			break;
 
-	// TODO: if I allow PE to successfully return when not hanging, I'll need to do work here if successful
+		requestInfo = requestInfo->nextInfoPointer;
+	}
 
-	*flag = 0;
+	if(requestInfo->type == REQUEST_SEND_TYPE)
+	{
+		// tell dest we're sending
+		int sendFlag = SEND_FLAG;
+		WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&sendFlag, sizeof(int));
+
+		// tell dest the comm we're using
+		WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&(requestInfo->comm), sizeof(MPI_Comm));
+
+		// tell dest our rank
+		WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&MPI_World_rank, sizeof(int));
+
+		// tell dest the tag we're using
+		WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&(requestInfo->tag), sizeof(int));
+
+		while(ProgressEngine(requestInfo->targetFD))
+			;
+
+		int typeSize;
+
+		if(requestInfo->datatype == MPI_CHAR)
+			typeSize = sizeof(char);
+		else if(requestInfo->datatype == MPI_INT)
+			typeSize = sizeof(int);
+
+		int bytesToWrite = requestInfo->count * typeSize;
+
+		WriteToCommRank(requestInfo->comm, requestInfo->other, requestInfo->buf, bytesToWrite);
+	}
+	else if(requestInfo->type == REQUEST_RECV_TYPE)
+	{
+		while(ProgressEngine(requestInfo->targetFD))
+			;
+
+		// TODO: just throws away messages on a comm it isn't expecting
+		int senderComm;
+
+		ReadFromCommRank(requestInfo->comm, requestInfo->other, (void *)&senderComm, sizeof(int));
+
+		int senderSource;
+		ReadFromCommRank(requestInfo->comm, requestInfo->other, (void *)&senderSource, sizeof(int));
+
+		int senderTag;
+		ReadFromCommRank(requestInfo->comm, requestInfo->other, (void *)&senderTag, sizeof(int));
+
+		status->MPI_SOURCE = senderSource;
+		status->MPI_TAG = senderTag;
+
+		if(senderComm != requestInfo->comm)
+		{
+			// TODO: wrong comm... work this out
+			return MPI_SUCCESS;
+		}
+
+		if(requestInfo->tag == MPI_ANY_TAG || senderTag == requestInfo->tag)
+		{
+			int readyFlag = RECV_READY_FLAG;
+			WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&readyFlag, sizeof(int));
+
+			int typeSize;
+
+			if(requestInfo->datatype == MPI_CHAR)
+				typeSize = sizeof(char);
+			else if(requestInfo->datatype == MPI_INT)
+				typeSize = sizeof(int);
+
+			int bytesToRead = requestInfo->count * typeSize;
+
+			ReadFromCommRank(requestInfo->comm, requestInfo->other, requestInfo->buf, bytesToRead);
+		}
+		else
+		{
+			status->MPI_ERROR = MPI_ERR_TAG;
+			return MPI_ERR_TAG;
+		}
+	}
+
+	*flag = 1;
 
 	return MPI_SUCCESS;
 }
@@ -901,11 +939,24 @@ int MPI_Wait(MPI_Request *request, MPI_Status *status)
 		requestInfo = requestInfo->nextInfoPointer;
 	}
 
-	while(ProgressEngine(requestInfo->targetFD))
-		;
-
 	if(requestInfo->type == REQUEST_SEND_TYPE)
 	{
+		// tell dest we're sending
+		int sendFlag = SEND_FLAG;
+		WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&sendFlag, sizeof(int));
+
+		// tell dest the comm we're using
+		WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&(requestInfo->comm), sizeof(MPI_Comm));
+
+		// tell dest our rank
+		WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&MPI_World_rank, sizeof(int));
+
+		// tell dest the tag we're using
+		WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&(requestInfo->tag), sizeof(int));
+
+		while(ProgressEngine(requestInfo->targetFD))
+			;
+
 		int typeSize;
 
 		if(requestInfo->datatype == MPI_CHAR)
@@ -919,17 +970,13 @@ int MPI_Wait(MPI_Request *request, MPI_Status *status)
 	}
 	else if(requestInfo->type == REQUEST_RECV_TYPE)
 	{
+		while(ProgressEngine(requestInfo->targetFD))
+			;
+
 		// TODO: just throws away messages on a comm it isn't expecting
 		int senderComm;
 
-		while(senderComm != requestInfo->comm);
-		{
-			int senderFlag;
-			while(senderFlag != SEND_FLAG)
-				ReadFromCommRank(requestInfo->comm, requestInfo->other, (void *)&senderFlag, sizeof(int));
-
-			ReadFromCommRank(requestInfo->comm, requestInfo->other, (void *)&senderComm, sizeof(int));
-		}
+		ReadFromCommRank(requestInfo->comm, requestInfo->other, (void *)&senderComm, sizeof(int));
 
 		int senderSource;
 		ReadFromCommRank(requestInfo->comm, requestInfo->other, (void *)&senderSource, sizeof(int));
@@ -939,6 +986,12 @@ int MPI_Wait(MPI_Request *request, MPI_Status *status)
 
 		status->MPI_SOURCE = senderSource;
 		status->MPI_TAG = senderTag;
+
+		if(senderComm != requestInfo->comm)
+		{
+			// TODO: wrong comm... work this out
+			return MPI_SUCCESS;
+		}
 
 		if(requestInfo->tag == MPI_ANY_TAG || senderTag == requestInfo->tag)
 		{
@@ -1029,7 +1082,7 @@ int ProgressEngine(int blockingSocket)
 		fdSetSize++;
 
 		// waiting on some socket in particular
-		if(blockingSocket != -1)
+		if(blockingSocket != PE_DONT_HANG)
 		{
 			rc = select(fdSetSize, &readFDs, NULL, NULL, NULL);
 
@@ -1090,8 +1143,7 @@ int ProgressEngine(int blockingSocket)
 						{
 							if(currentRequest->targetFD == MPI_Rank_sockets[i])
 							{
-								DeleteRequestInfo(currentRequest);
-								break;
+								return 0;
 							}
 
 							currentRequest = currentRequest->nextInfoPointer;
@@ -1107,8 +1159,7 @@ int ProgressEngine(int blockingSocket)
 						{
 							if(currentRequest->targetFD == MPI_Rank_sockets[i])
 							{
-								DeleteRequestInfo(currentRequest);
-								break;
+								return 0;
 							}
 
 							currentRequest = currentRequest->nextInfoPointer;
@@ -1163,6 +1214,8 @@ int ProgressEngine(int blockingSocket)
 
 				break;
 			}
+		
+			break;
 		}
 	}
 
@@ -1408,6 +1461,7 @@ int AddRequestInfo(int type, int targetFD, void *buf, int count, MPI_Datatype da
 		newRequest->nextInfoPointer = NULL;
 
 		MPI_Num_requests++;
+		MPI_Last_request_pointer->nextInfoPointer = newRequest;
 		MPI_Last_request_pointer = newRequest;
 	}
 

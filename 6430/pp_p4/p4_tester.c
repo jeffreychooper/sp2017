@@ -59,6 +59,12 @@ int NonBlock() //nonblocking send/recv
         int buf2 = 2222;
         int buf3 = 3333;
 
+		#if DEBUG
+		int debugFlag = 0;
+		while(!debugFlag)
+			;
+		#endif
+
         MPI_Isend(&buf1, 1, MPI_INT, 1, 50, MPI_COMM_WORLD, &req1);
         MPI_Isend(&buf2, 1, MPI_INT, 1, 60, MPI_COMM_WORLD, &req2);
         MPI_Isend(&buf3, 1, MPI_INT, 1, 50, MPI_COMM_WORLD, &req3);
@@ -78,6 +84,12 @@ int NonBlock() //nonblocking send/recv
     }
     if (rank == 1)
     {
+		#if DEBUG
+		int debugFlag = 0;
+		while(!debugFlag)
+			;
+		#endif
+
         int flag;
 
         MPI_Request req1, req2, req3;
