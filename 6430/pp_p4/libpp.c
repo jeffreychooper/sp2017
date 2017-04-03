@@ -1176,7 +1176,7 @@ int ProgressEngine(int blockingSocket)
 
 						while(requestInfo)
 						{
-							if(requestInfo->tag = requestedTag)
+							if(requestInfo->tag == requestedTag)
 								break;
 
 							requestInfo = requestInfo->nextInfoPointer;
@@ -1202,6 +1202,20 @@ int ProgressEngine(int blockingSocket)
 
 						// set the completed request as finished... continue trying for this one
 						requestInfo->finished = 1;
+
+						// send all that info again...
+						int sendFlag = SEND_FLAG;
+						WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&sendFlag, sizeof(int));
+
+						// tell dest the comm we're using
+						WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&(requestInfo->comm), sizeof(MPI_Comm));
+
+						// tell dest our rank
+						WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&MPI_World_rank, sizeof(int));
+
+						// tell dest the tag we're using
+						WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&(requestInfo->tag), sizeof(int));
+
 						continue;
 					}
 
