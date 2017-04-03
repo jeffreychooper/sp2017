@@ -27,6 +27,7 @@
 #define LOOP_ONE_FLAG 6
 #define LOOP_TWO_FLAG 7
 #define GATHER_ROOT_READY_FLAG 8
+#define WRONG_TAG_FLAG 9
 
 #define REQUEST_SEND_TYPE 0
 #define REQUEST_RECV_TYPE 1
@@ -924,6 +925,8 @@ int MPI_Test(MPI_Request *request, int *flag, MPI_Status *status)
 
 	*flag = 1;
 
+	// DeleteRequestInfo(requestInfo);
+
 	return MPI_SUCCESS;
 }
 
@@ -1015,6 +1018,8 @@ int MPI_Wait(MPI_Request *request, MPI_Status *status)
 			return MPI_ERR_TAG;
 		}
 	}
+
+	// DeleteRequestInfo(requestInfo);
 
 	return MPI_SUCCESS;
 }
@@ -1491,7 +1496,6 @@ void DeleteRequestInfo(MPI_Request_info *request)
 	{
 		request->prevInfoPointer->nextInfoPointer = request->nextInfoPointer;
 		request->nextInfoPointer->prevInfoPointer = request->prevInfoPointer;
-		free(request);
 
 		MPI_Num_requests--;
 		
@@ -1504,5 +1508,7 @@ void DeleteRequestInfo(MPI_Request_info *request)
 		{
 			MPI_First_request_pointer = request->prevInfoPointer;
 		}
+
+		free(request);
 	}
 }
