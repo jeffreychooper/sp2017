@@ -49,6 +49,7 @@ struct MPI_Request_info
 {
 	int requestID;
 	int type;		// 0 send 1 receive
+	int finished;
 	int targetFD;
 	void *buf;
 	int count;
@@ -846,6 +847,12 @@ int MPI_Test(MPI_Request *request, int *flag, MPI_Status *status)
 		requestInfo = requestInfo->nextInfoPointer;
 	}
 
+	if(requestInfo->finished)
+	{
+		DeleteRequestInfo(requestInfo);
+		return MPI_SUCCESS;
+	}
+
 	if(requestInfo->type == REQUEST_SEND_TYPE)
 	{
 		// tell dest we're sending
@@ -900,6 +907,17 @@ int MPI_Test(MPI_Request *request, int *flag, MPI_Status *status)
 			return MPI_SUCCESS;
 		}
 
+		if(requestInfo->tag != MPI_ANY_TAG && senderTag != requestInfo->tag)
+		{
+			int wrongTagFlag = WRONG_TAG_FLAG;
+			WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&wrongTagFlag, sizeof(int));
+
+			int desiredTag = requestInfo->tag;
+			WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&desiredTag, sizeof(int));
+
+			ReadFromCommRank(requestInfo->comm, requestInfo->other, (void *)&senderTag, sizeof(int));
+		}
+
 		if(requestInfo->tag == MPI_ANY_TAG || senderTag == requestInfo->tag)
 		{
 			int readyFlag = RECV_READY_FLAG;
@@ -915,11 +933,6 @@ int MPI_Test(MPI_Request *request, int *flag, MPI_Status *status)
 			int bytesToRead = requestInfo->count * typeSize;
 
 			ReadFromCommRank(requestInfo->comm, requestInfo->other, requestInfo->buf, bytesToRead);
-		}
-		else
-		{
-			status->MPI_ERROR = MPI_ERR_TAG;
-			return MPI_ERR_TAG;
 		}
 	}
 
@@ -942,6 +955,12 @@ int MPI_Wait(MPI_Request *request, MPI_Status *status)
 		requestInfo = requestInfo->nextInfoPointer;
 	}
 
+	if(requestInfo->finished)
+	{
+		DeleteRequestInfo(requestInfo);
+		return MPI_SUCCESS;
+	}
+
 	if(requestInfo->type == REQUEST_SEND_TYPE)
 	{
 		// tell dest we're sending
@@ -996,6 +1015,17 @@ int MPI_Wait(MPI_Request *request, MPI_Status *status)
 			return MPI_SUCCESS;
 		}
 
+		if(requestInfo->tag != MPI_ANY_TAG && senderTag != requestInfo->tag)
+		{
+			int wrongTagFlag = WRONG_TAG_FLAG;
+			WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&wrongTagFlag, sizeof(int));
+
+			int desiredTag = requestInfo->tag;
+			WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&desiredTag, sizeof(int));
+
+			ReadFromCommRank(requestInfo->comm, requestInfo->other, (void *)&senderTag, sizeof(int));
+		}
+
 		if(requestInfo->tag == MPI_ANY_TAG || senderTag == requestInfo->tag)
 		{
 			int readyFlag = RECV_READY_FLAG;
@@ -1011,11 +1041,6 @@ int MPI_Wait(MPI_Request *request, MPI_Status *status)
 			int bytesToRead = requestInfo->count * typeSize;
 
 			ReadFromCommRank(requestInfo->comm, requestInfo->other, requestInfo->buf, bytesToRead);
-		}
-		else
-		{
-			status->MPI_ERROR = MPI_ERR_TAG;
-			return MPI_ERR_TAG;
 		}
 	}
 
@@ -1139,6 +1164,46 @@ int ProgressEngine(int blockingSocket)
 				{
 					int requestFlag;
 					read(rankSocket, (void *)&requestFlag, sizeof(int));
+
+					if(requestFlag == WRONG_TAG_FLAG)
+					{
+						// read the tag the other rank wants
+						int requestedTag;
+						read(rankSocket, (void *)&requestedTag, sizeof(int));
+
+						// find the right tag
+						MPI_Request_info *requestInfo = MPI_First_request_pointer;
+
+						while(requestInfo)
+						{
+							if(requestInfo->tag = requestedTag)
+								break;
+
+							requestInfo = requestInfo->nextInfoPointer;
+						}
+
+						// send the tag again...
+						WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&(requestInfo->tag), sizeof(int));
+
+						// read the ready thing
+						read(rankSocket, (void *)&requestFlag, sizeof(int));
+
+						// send the requested stuff
+						int typeSize;
+
+						if(requestInfo->datatype == MPI_CHAR)
+							typeSize = sizeof(char);
+						else if(requestInfo->datatype == MPI_INT)
+							typeSize = sizeof(int);
+
+						int bytesToWrite = requestInfo->count * typeSize;
+
+						WriteToCommRank(requestInfo->comm, requestInfo->other, requestInfo->buf, bytesToWrite);
+
+						// set the completed request as finished... continue trying for this one
+						requestInfo->finished = 1;
+						continue;
+					}
 
 					if(requestFlag == RECV_READY_FLAG)
 					{
@@ -1471,6 +1536,7 @@ int AddRequestInfo(int type, int targetFD, void *buf, int count, MPI_Datatype da
 	}
 
 	newRequest->type = type;
+	newRequest->finished = 0;
 	newRequest->targetFD = targetFD;
 	newRequest->buf = buf;
 	newRequest->count = count;
