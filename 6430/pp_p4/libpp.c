@@ -925,7 +925,7 @@ int MPI_Test(MPI_Request *request, int *flag, MPI_Status *status)
 
 	*flag = 1;
 
-	// DeleteRequestInfo(requestInfo);
+	DeleteRequestInfo(requestInfo);
 
 	return MPI_SUCCESS;
 }
@@ -1019,7 +1019,7 @@ int MPI_Wait(MPI_Request *request, MPI_Status *status)
 		}
 	}
 
-	// DeleteRequestInfo(requestInfo);
+	DeleteRequestInfo(requestInfo);
 
 	return MPI_SUCCESS;
 }
@@ -1494,8 +1494,11 @@ void DeleteRequestInfo(MPI_Request_info *request)
 	}
 	else
 	{
-		request->prevInfoPointer->nextInfoPointer = request->nextInfoPointer;
-		request->nextInfoPointer->prevInfoPointer = request->prevInfoPointer;
+		if(request->prevInfoPointer != NULL)
+			request->prevInfoPointer->nextInfoPointer = request->nextInfoPointer;
+		
+		if(request->nextInfoPointer != NULL)
+			request->nextInfoPointer->prevInfoPointer = request->prevInfoPointer;
 
 		MPI_Num_requests--;
 		
