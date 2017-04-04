@@ -441,7 +441,7 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, M
 		// read from the sender until it tells me the tag it's sending
 		int senderComm;
 
-		while(senderComm != comm);
+		while(senderComm != comm)
 		{
 			int senderFlag;
 			while(senderFlag != SEND_FLAG)
@@ -1024,6 +1024,11 @@ int MPI_Wait(MPI_Request *request, MPI_Status *status)
 			int desiredTag = requestInfo->tag;
 			WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&desiredTag, sizeof(int));
 
+			// tell the other guy his info since he lost it...
+			WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&senderComm, sizeof(MPI_Comm));
+			WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&senderSource, sizeof(int));
+			WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&senderTag, sizeof(int));
+
 			ReadFromCommRank(requestInfo->comm, requestInfo->other, (void *)&senderTag, sizeof(int));
 		}
 
@@ -1052,7 +1057,8 @@ int MPI_Wait(MPI_Request *request, MPI_Status *status)
 				int desiredTag = requestInfo->tag;
 				WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&desiredTag, sizeof(int));
 
-				// sender can't see its own tag... we have to tell it
+				WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&senderComm, sizeof(MPI_Comm));
+				WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&senderSource, sizeof(int));
 				WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&senderTag, sizeof(int));
 
 				ReadFromCommRank(requestInfo->comm, requestInfo->other, (void *)&senderTag, sizeof(int));
@@ -1204,11 +1210,19 @@ int ProgressEngine(int blockingSocket)
 						int requestedTag;
 						read(rankSocket, (void *)&requestedTag, sizeof(int));
 
+						// get my info back since I can't access it here...
+						MPI_Comm myComm;
+						int myRank;
+						int myTag;
+						read(rankSocket, (void *)&myComm, sizeof(MPI_Comm));
+						read(rankSocket, (void *)&myRank, sizeof(int));
+						read(rankSocket, (void *)&myTag, sizeof(int));
+
+						MPI_Request_info *requestInfo = MPI_First_request_pointer;
+
 						if(requestedTag != MPI_ANY_TAG)
 						{
 							// find the right tag
-							MPI_Request_info *requestInfo = MPI_First_request_pointer;
-
 							while(requestInfo)
 							{
 								if(requestInfo->tag == requestedTag)
@@ -1221,13 +1235,6 @@ int ProgressEngine(int blockingSocket)
 						{
 							// the other rank wants any tag... but has a friend that needs ours...
 							// find the next send that has a tag that isn't ours
-
-							// note... we don't know our own tag, the recv will tell us
-							int myTag;
-							read(rankSocket, (void *)&myTag, sizeof(int));
-
-							MPI_Request_info *requestInfo = MPI_First_request_pointer;
-
 							while(requestInfo)
 							{
 								if(requestInfo->tag != myTag)
@@ -1262,14 +1269,11 @@ int ProgressEngine(int blockingSocket)
 						int sendFlag = SEND_FLAG;
 						WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&sendFlag, sizeof(int));
 
-						// tell dest the comm we're using
-						WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&(requestInfo->comm), sizeof(MPI_Comm));
 
-						// tell dest our rank
-						WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&MPI_World_rank, sizeof(int));
-
-						// tell dest the tag we're using
-						WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&(requestInfo->tag), sizeof(int));
+						
+						WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&myComm, sizeof(MPI_Comm));
+						WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&myRank, sizeof(int));
+						WriteToCommRank(requestInfo->comm, requestInfo->other, (void *)&myTag, sizeof(int));
 
 						continue;
 					}
