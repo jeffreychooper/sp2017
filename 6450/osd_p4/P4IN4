@@ -1,0 +1,93 @@
+vs  smt        1
+vs  sut        2
+vs  smtother   3
+vs  smtcs      4
+vs  sutother   5
+vs  sutcs      6
+
+vr  rtop      101 1.1  121 2.1
+vr  rmtother  102 1.2  131 3.1
+vr  rmtcs     103 1.3  141 4.1
+vr  rutother  122 2.2  151 5.1
+vr  rutcs     123 2.3  161 6.1
+
+vh  hmt1  132 3.2
+vh  hmt2  133 3.3
+vh  hmt3  142 4.2
+vh  hmt4  143 4.3
+
+vh  hut1  152 5.2
+vh  hut2  153 5.3
+vh  hut3  162 6.2
+vh  hut4  163 6.3
+
+route  rtop  3  101  1.2
+route  rtop  4  101  1.3
+route  rtop  5  121  2.2
+route  rtop  6  121  2.3
+
+route  rmtother  3  131
+# route  rmtother  4  102  1.3    # without this packets travel up to rtop
+route  rmtother  def  102  1.1
+route  rmtcs     4  141
+# route  rmtcs     3  103  1.2    # without this packets travel up to rtop
+route  rmtcs     def  103  1.1
+
+route  rutother  5  151
+# route  rutother  6  122  2.3    # without this packets travel up to rtop
+route  rutother  def  122  2.1
+route  rutcs     6  161
+# route  rutcs     5  123  2.2    # without this packets travel up to rtop
+route  rutcs     def  123  2.1
+
+route  hmt1  3  132
+route  hmt1  def  132  3.1
+route  hmt2  3  133
+route  hmt2  def  133  3.1
+route  hmt3  4  142
+route  hmt3  def  142  4.1
+route  hmt4  4  143
+route  hmt4  def  143  4.1
+
+route  hut1  5  152
+route  hut1  def  152  5.1
+route  hut2  5  153
+route  hut2  def  153  5.1
+route  hut3  6  162
+route  hut3  def  162  6.1
+route  hut4  6  163
+route  hut4  def  163  6.1
+
+
+prt hello world
+prt
+
+prt RMB trtest hmt1 hmt2  ** trtest
+prt
+trtest  hmt1  hmt2
+pause 3
+prt
+
+prt RMB trtest hmt1 hmt3  ** trtest   (thru rtop unless we UN-comment above lines)
+prt
+trtest  hmt1  hmt3
+pause 3
+prt
+
+prt RMB trtest rmtother 2.2  ** trtest  FAILS at rtop (no route to net 2)
+prt
+trtest  rmtother  2.2
+pause 3
+prt
+
+prt RMB trtest hmt1 hut4  ** trtest
+prt
+trtest  hmt1  hut4
+pause 3
+prt
+
+prt RMB trtest hut1 hmt4  ** trtest
+prt
+trtest  hut1  hmt4
+pause 3
+prt

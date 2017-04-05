@@ -1,0 +1,44 @@
+vs  s1  1
+vs  s2  2
+vh  h1  101 1.1
+vh  h2  102 2.2
+vh  h3  103 1.3
+vr  r1  104 1.4  105 2.1
+
+route  h1  1  101
+route  h1  def  101  1.4
+
+route  h2  def  102  2.1
+
+route  h3  def  103  1.4
+
+route  r1  1  104
+route  r1  2  105
+
+
+prt hello world
+prt
+
+prt RMB ping h1 h3 (succeeds on same net 1)
+prt
+iptest  h1  h3
+pause 3
+prt
+
+prt RMB ping h1 h2 (succeeds going to net 2)
+prt
+iptest  h1  h2
+pause 3
+prt
+
+prt RMB ping h2 1.3   h2-to-h3  (succeeds going to net 1)
+prt
+iptest  h2  1.3    ## h2 to h3
+pause 3
+prt
+
+prt RMB ping h3 9.9  (FAILS  ** at r1 **  because r1 has no info about net 9)
+prt
+iptest  h3  9.9
+pause 3
+prt

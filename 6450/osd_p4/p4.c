@@ -23,11 +23,14 @@
 #define MAX_ETHERNET_PACKET_SIZE 104
 #define PAYLOAD_SIZE 100
 #define ARP_CACHE_SIZE 6
+#define ROUTE_TABLE_SIZE 6
 
 #define FINISHED_FLAG 1
 #define MACSEND_FLAG 2
 #define ARPTEST_FLAG 3
 #define ARPPRT_FLAG 4
+
+#define DEF_ROUTE = 255
 
 // switch information
 typedef struct {
@@ -53,6 +56,11 @@ unsigned char arpCacheNet[6];
 unsigned char arpCacheHost[6];
 unsigned char arpCacheMAC[6];
 int arpCacheIndex;
+unsigned char routeTableDestNet[6];
+unsigned char routeTableSourceMAC[6];
+unsigned char routeTableGateNet[6];
+unsigned char routeTableGateHost[6];
+int routeTableIndex;
 
 } RouterInfo;
 
@@ -69,6 +77,11 @@ unsigned char arpCacheNet[6];
 unsigned char arpCacheHost[6];
 unsigned char arpCacheMAC[6];
 int arpCacheIndex;
+unsigned char routeTableDestNet[6];
+unsigned char routeTableSourceMAC[6];
+unsigned char routeTableGateNet[6];
+unsigned char routeTableGateHost[6];
+int routeTableIndex;
 
 } HostInfo;
 

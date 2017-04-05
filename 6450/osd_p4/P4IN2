@@ -1,0 +1,46 @@
+vs  s1  1
+vs  s2  2
+vs  s3  3
+vh  h1  101 1.1
+vr  r1  102 1.2  103 2.1
+vr  r2  104 2.2  105 3.1
+vh  h2  106 3.2
+
+route  h1  def  101  1.2
+
+route  r1  1  102
+route  r1  def  103  2.2
+
+# route  r2  2  104     # not really useful in this small example
+route  r2  1  104  2.1
+route  r2  def  105  3.2
+
+route  h2  def  106  3.1
+
+
+prt hello world
+prt
+
+prt RMB iptest h1 h2
+prt
+iptest  h1  h2
+pause 3
+prt
+
+prt RMB iptest h2 h1
+prt
+iptest  h2  h1
+pause 3
+prt
+
+prt RMB trtest h1 h2  ** trtest
+prt
+trtest  h1  h2
+pause 3
+prt
+
+prt RMB trtest h2 h1  ** trtest
+prt
+trtest  h2  h1
+pause 3
+prt

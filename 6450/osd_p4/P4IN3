@@ -1,0 +1,57 @@
+vs  s1  1
+vs  s2  2
+vs  s3  3
+vs  s4  4
+vs  s5  5
+vh  h1  101 1.1
+vh  h2  102 2.1
+vh  h3  103 3.1
+vh  h4  104 4.1
+vh  h5  105 5.1
+vr  rx  106 1.2  107 2.2  108 3.2  109 4.2  110 5.2
+
+route  h1  def  101  1.2
+route  h2  def  102  2.2
+route  h3  def  103  3.2
+route  h4  def  104  4.2
+route  h5  def  105  5.2
+
+route  rx  1  106
+route  rx  2  107
+route  rx  3  108
+route  rx  4  109
+route  rx  5  110
+
+
+prt hello world
+prt
+
+prt RMB iptest h1 h2
+prt
+iptest  h1  h2
+pause 3
+prt
+
+prt RMB iptest h2 h3
+prt
+iptest  h2  h3
+pause 3
+prt
+
+prt RMB iptest h3 h4
+prt
+iptest  h3  h4
+pause 3
+prt
+
+prt RMB iptest h4 h5
+prt
+iptest  h4  h5
+pause 3
+prt
+
+prt RMB trtest h5 h1  ** trtest
+prt
+trtest  h5  h1
+pause 3
+prt
