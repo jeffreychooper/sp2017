@@ -34,6 +34,9 @@
 #define PING_FLAG 6
 #define TR_FLAG 7
 
+#define MACSEND_PROTOCOL 0
+#define ARPREQ_PROTOCOL 1
+#define ARPREPLY_PROTOCOL 2
 #define PING_PROTOCOL 3
 #define TR_PROTOCOL 4
 
@@ -809,12 +812,17 @@ int main(int argc, char *argv[])
 					// host part of IP
 					charBuffer[0] = (unsigned char)atoi(p);
 					write(deviceInterface, (void *)&charBuffer, 1);
-					printf("%d\n", charBuffer[0]);
 				}
 			}
 		}
 		else if(strcmp(operations[operationsIndex][0], "iptest") == 0)
 		{
+			#if DEBUG
+			int debug=1;
+			while(debug)
+				;
+			#endif
+
 			// get the target host or router's name
 			char targetName[NAME_LENGTH];
 			strcpy(&targetName[0], operations[operationsIndex][1]);
@@ -868,7 +876,7 @@ int main(int argc, char *argv[])
 			else
 			{
 				char *p;
-				if(p = strtok(operations[operationsIndex][4], "."))
+				if(p = strtok(operations[operationsIndex][2], "."))
 				{
 					// network part of IP
 					charBuffer[0] = (unsigned char)atoi(p);
@@ -879,7 +887,6 @@ int main(int argc, char *argv[])
 						// host part of IP
 						charBuffer[0] = (unsigned char)atoi(p);
 						write(deviceInterface, (void *)&charBuffer, 1);
-						printf("%d\n", charBuffer[0]);
 					}
 				}
 			}
@@ -891,6 +898,12 @@ int main(int argc, char *argv[])
 
 		operationsIndex++;
 	}
+
+	#if DEBUG
+	int debug = 1;
+	while(debug)
+		;
+	#endif
 
 	char messageFlagBuffer[1];
 	messageFlagBuffer[0] = 1;
@@ -1088,6 +1101,8 @@ void ActAsRouter(RouterInfo *routerInfo)
 	int arpWaitHavePacket;
 	unsigned char arpWaitSourceMAC;
 	unsigned char arpWaitProtocol;
+	int arpWaitFinalHost;
+	int arpWaitFinalNet;
 	int arpWaitSendInterface;
 	unsigned char *arpWaitIPPacket;
 
@@ -1168,9 +1183,9 @@ void ActAsRouter(RouterInfo *routerInfo)
 					bytesRead += read(routerInfo->interfaces[interfaceIndex], (void *)&buffer + bytesRead, MAX_ETHERNET_PACKET_SIZE - bytesRead);
 
 				char *payload = GetPayload((char *)buffer);
-				if(buffer[2] == 0)
+				if(buffer[2] == MACSEND_PROTOCOL)
 					printf("%s: macsend from %d on %d: %s\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), (int)routerInfo->MACs[interfaceIndex], payload);
-				else if(buffer[2] == 1)
+				else if(buffer[2] == ARPREQ_PROTOCOL)
 				{
 					// check if they're asking for me
 					if(payload[0] == routerInfo->netIPs[interfaceIndex] && payload[1] == routerInfo->hostIPs[interfaceIndex])
@@ -1196,7 +1211,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 						// printf("%s: arpreply to %d on %d: %d.%d %d\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), routerInfo->MACs[interfaceIndex], message[0], message[1], message[2]);
 					}
 				}
-				else if(buffer[2] == 2)
+				else if(buffer[2] == ARPREPLY_PROTOCOL)
 				{
 					// printf("%s: arpreply from %d on %d: %d.%d %d\n", routerInfo->name, GetEthernetPacketSourceMAC(buffer), routerInfo->MACs[interfaceIndex], payload[0], payload[1], payload[2]);
 
@@ -1227,12 +1242,18 @@ void ActAsRouter(RouterInfo *routerInfo)
 						while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
 							bytesWritten += write(arpWaitSendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
 
+						printf("%s: sent ping to %d.%d\n", routerInfo->name, arpWaitFinalNet, arpWaitFinalHost);
+
 						free(packetToSend);
 					}
 					
 					expectingARPReply = 0;
 					arpWaitHavePacket = 0;
 					free(arpWaitIPPacket);
+				}
+				else if(buffer[2] == PING_PROTOCOL)
+				{
+
 				}
 
 				free(payload);
@@ -1456,7 +1477,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 
 					for(int i = 0; i < routerInfo->arpCacheCount; i++)
 					{
-						if(routerInfo->arpCacheNet[i] == targetNet[0] && routerInfo->arpCacheHost[i] == targetHost[0])
+						if(routerInfo->arpCacheNet[i] == routerInfo->routeTableGateNet[targetRouteIndex] && routerInfo->arpCacheHost[i] == routerInfo->routeTableGateHost[targetRouteIndex])
 						{
 							targetArpIndex = i;
 							break;
@@ -1467,8 +1488,8 @@ void ActAsRouter(RouterInfo *routerInfo)
 					{
 						// broadcast the request
 						unsigned char message[PAYLOAD_SIZE];
-						message[0] = targetNet[0];
-						message[1] = targetHost[0];
+						message[0] = routerInfo->routeTableGateNet[targetRouteIndex];
+						message[1] = routerInfo->routeTableGateHost[targetRouteIndex];
 
 						char *packetToSend = CreateEthernetPacket(255,
 																  routerInfo->MACs[interfaceIndex],
@@ -1483,12 +1504,14 @@ void ActAsRouter(RouterInfo *routerInfo)
 
 						free(packetToSend);
 
-						arpWaitNet = targetNet[0];
-						arpWaitHost = targetHost[0];
+						arpWaitNet = routerInfo->routeTableGateNet[targetRouteIndex];
+						arpWaitHost = routerInfo->routeTableGateHost[targetRouteIndex];
 						arpWaitHavePacket = 1;
 						arpWaitIPPacket = ipPacket;
 						arpWaitSourceMAC = sourceMAC;
 						arpWaitProtocol = (unsigned char)PING_PROTOCOL;
+						arpWaitFinalNet = targetNet[0];
+						arpWaitFinalHost = targetHost[0];
 						arpWaitSendInterface = sendInterface;
 						expectingARPReply = 1;
 						gettimeofday(&arpStartTime, NULL);
@@ -1505,6 +1528,8 @@ void ActAsRouter(RouterInfo *routerInfo)
 
 						while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
 							bytesWritten += write(sendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+						printf("%s: sent ping to %d.%d\n", routerInfo->name, targetNet[0], targetHost[0]);
 
 						free(ipPacket);
 						free(packetToSend);
