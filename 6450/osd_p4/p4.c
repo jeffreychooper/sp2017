@@ -24,6 +24,7 @@
 #define PAYLOAD_SIZE 100
 #define ARP_CACHE_SIZE 6
 #define ROUTE_TABLE_SIZE 6
+#define MAX_IP_PACKET_SIZE 100
 
 #define FINISHED_FLAG 1
 #define MACSEND_FLAG 2
@@ -32,6 +33,9 @@
 #define ROUTE_FLAG 5
 #define PING_FLAG 6
 #define TR_FLAG 7
+
+#define PING_PROTOCOL 3
+#define TR_PROTOCOL 4
 
 #define DEF_ROUTE 255
 
@@ -59,6 +63,7 @@ unsigned char arpCacheNet[6];
 unsigned char arpCacheHost[6];
 unsigned char arpCacheMAC[6];
 int arpCacheIndex;
+int arpCacheCount;
 unsigned char routeTableDestNet[6];
 unsigned char routeTableSourceMAC[6];
 unsigned char routeTableGateNet[6];
@@ -80,6 +85,7 @@ unsigned char arpCacheNet[6];
 unsigned char arpCacheHost[6];
 unsigned char arpCacheMAC[6];
 int arpCacheIndex;
+int arpCacheCount;
 unsigned char routeTableDestNet[6];
 unsigned char routeTableSourceMAC[6];
 unsigned char routeTableGateNet[6];
@@ -96,6 +102,7 @@ unsigned char *CreateEthernetPacket(unsigned char destMAC, unsigned char srcMAC,
 int GetEthernetPacketDestMAC(unsigned char *packet);
 int GetEthernetPacketSourceMAC(unsigned char *packet);
 char *GetPayload(char *packet);
+unsigned char *CreateIPPacket(unsigned char length, unsigned char ttl, unsigned char protocol, unsigned char sourceNet, unsigned char sourceHost, unsigned char destNet, unsigned char destHost, unsigned char *payload);
 
 int main(int argc, char *argv[])
 {
@@ -1078,6 +1085,8 @@ void ActAsRouter(RouterInfo *routerInfo)
 	struct timeval timePassed;
 	unsigned char arpWaitNet;
 	unsigned char arpWaitHost;
+	int arpWaitHavePacket;
+	unsigned char *arpWaitIPPacket;
 
 	while(!done)
 	{
@@ -1193,6 +1202,9 @@ void ActAsRouter(RouterInfo *routerInfo)
 					routerInfo->arpCacheMAC[index] = payload[2];
 
 					routerInfo->arpCacheIndex++;
+					
+					if(routerInfo->arpCacheCount != ARP_CACHE_SIZE)
+						routerInfo->arpCacheCount++;
 
 					if(routerInfo->arpCacheIndex == ARP_CACHE_SIZE)
 						routerInfo->arpCacheIndex = 0;
@@ -1329,7 +1341,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 			}
 			else if(buffer[0] == ARPPRT_FLAG)
 			{
-				if(routerInfo->arpCacheIndex == 0 && routerInfo->arpCacheMAC[0] == 0)
+				if(routerInfo->arpCacheCount == 0)
 				{
 					printf("%s: ARP cache is currently empty\n", routerInfo->name);
 				}
@@ -1376,9 +1388,9 @@ void ActAsRouter(RouterInfo *routerInfo)
 
 				int targetRouteIndex = -1;
 
-				for(int i = 0; i < routeTableCount; i++)
+				for(int i = 0; i < routerInfo->routeTableCount; i++)
 				{
-					if(routeTableDestNet[i] == targetNet || routeTableDestNet[i] == DEF_ROUTE)
+					if(routerInfo->routeTableDestNet[i] == targetNet[0] || routerInfo->routeTableDestNet[i] == DEF_ROUTE)
 					{
 						targetRouteIndex = i;
 						break;
@@ -1387,11 +1399,90 @@ void ActAsRouter(RouterInfo *routerInfo)
 
 				if(targetRouteIndex == -1)
 				{
-					printf("%s: **** no route to host: %d.%d\n", routerInfo->name, targetNet[0], targetHost[0]);
+					printf("%s: **** no route to IP: %d.%d\n", routerInfo->name, targetNet[0], targetHost[0]);
 				}
 				else
 				{
+					// find the right mac
+					unsigned char sourceMAC = routerInfo->routeTableSourceMAC[targetRouteIndex];
+					int interfaceIndex = 0;
+					int sendInterface;
 
+					while(interfaceIndex < 6 && routerInfo->interfaces[interfaceIndex])
+					{
+						if(routerInfo->MACs[interfaceIndex] == sourceMAC)
+						{
+							sendInterface = routerInfo->interfaces[interfaceIndex];
+							break;
+						}
+
+						interfaceIndex++;
+					}
+	
+					char *ipPayload = "";
+					char *ipPacket = CreateIPPacket(7 + strlen(ipPayload),
+													6,
+													PING_PROTOCOL,
+													routerInfo->netIPs[interfaceIndex],
+													routerInfo->hostIPs[interfaceIndex],
+													targetNet[0],
+													targetHost[0],
+													ipPayload);
+
+					int targetArpIndex = -1;
+
+					for(int i = 0; i < routerInfo->arpCacheCount; i++)
+					{
+						if(routerInfo->arpCacheNet[i] == targetNet[0] && routerInfo->arpCacheHost[i] == targetHost[0])
+						{
+							targetArpIndex = i;
+							break;
+						}
+					}
+
+					if(targetArpIndex = -1)
+					{
+						// broadcast the request
+						unsigned char message[PAYLOAD_SIZE];
+						message[0] = targetNet[0];
+						message[1] = targetHost[0];
+
+						char *packetToSend = CreateEthernetPacket(255,
+																  routerInfo->MACs[interfaceIndex],
+																  (unsigned char)1,
+																  4 + strlen(message),
+																  message);
+
+						int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
+
+						while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
+							bytesWritten += write(sendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+						free(packetToSend);
+
+						arpWaitNet = targetNet[0];
+						arpWaitHost = targetHost[0];
+						arpWaitHavePacket = 1;
+						arpWaitIPPacket = ipPacket;
+						expectingARPReply = 1;
+						gettimeofday(&arpStartTime, NULL);
+					}
+					else
+					{
+						char *packetToSend = CreateEthernetPacket(routerInfo->arpCacheMAC[targetArpIndex],
+																  sourceMAC,
+																  (unsigned char)PING_PROTOCOL,
+																  4 + strlen(ipPacket),
+																  ipPacket);
+
+						int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
+
+						while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
+							bytesWritten += write(sendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+						free(ipPacket);
+						free(packetToSend);
+					}
 				}
 			}
 		}
@@ -1514,6 +1605,9 @@ void ActAsHost(HostInfo *hostInfo)
 						hostInfo->arpCacheMAC[index] = payload[2];
 
 						hostInfo->arpCacheIndex++;
+
+						if(hostInfo->arpCacheCount != ARP_CACHE_SIZE)
+							hostInfo->arpCacheCount++;
 
 						if(hostInfo->arpCacheIndex == ARP_CACHE_SIZE)
 							hostInfo->arpCacheIndex = 0;
@@ -1697,4 +1791,22 @@ char *GetPayload(char *packet)
 	strncpy(payload, packet + 4, 100);
 
 	return payload;
+}
+
+// TODO: free the memory returned by this
+unsigned char *CreateIPPacket(unsigned char length, unsigned char ttl, unsigned char protocol, unsigned char sourceNet, unsigned char sourceHost, unsigned char destNet, unsigned char destHost, unsigned char *payload)
+{
+	unsigned char *returnPacket = calloc(MAX_IP_PACKET_SIZE, sizeof(unsigned char));
+
+	returnPacket[0] = length;
+	returnPacket[1] = ttl;
+	returnPacket[2] = protocol;
+	returnPacket[3] = sourceNet;
+	returnPacket[4] = sourceHost;
+	returnPacket[5] = destNet;
+	returnPacket[6] = destHost;
+
+	strncpy(&returnPacket[7], payload, strlen(payload));
+
+	return returnPacket;
 }
