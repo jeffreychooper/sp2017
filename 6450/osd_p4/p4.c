@@ -1086,6 +1086,9 @@ void ActAsRouter(RouterInfo *routerInfo)
 	unsigned char arpWaitNet;
 	unsigned char arpWaitHost;
 	int arpWaitHavePacket;
+	unsigned char arpWaitSourceMAC;
+	unsigned char arpWaitProtocol;
+	int arpWaitSendInterface;
 	unsigned char *arpWaitIPPacket;
 
 	while(!done)
@@ -1128,6 +1131,8 @@ void ActAsRouter(RouterInfo *routerInfo)
 			{
 				// printf("%s: arpreq to %d.%d timed out\n", routerInfo->name, arpWaitNet, arpWaitHost);
 				expectingARPReply = 0;
+				arpWaitHavePacket = 0;
+				free(arpWaitIPPacket);
 				rc = select(setSize, &readFDs, NULL, NULL, NULL);
 			}
 			else
@@ -1208,8 +1213,26 @@ void ActAsRouter(RouterInfo *routerInfo)
 
 					if(routerInfo->arpCacheIndex == ARP_CACHE_SIZE)
 						routerInfo->arpCacheIndex = 0;
+
+					if(arpWaitHavePacket)
+					{
+						char *packetToSend = CreateEthernetPacket(routerInfo->arpCacheMAC[index],
+																  arpWaitSourceMAC,
+																  arpWaitProtocol,
+																  4 + strlen(arpWaitIPPacket),
+																  arpWaitIPPacket);
+
+						int bytesWritten = write(arpWaitSendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
+
+						while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
+							bytesWritten += write(arpWaitSendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+						free(packetToSend);
+					}
 					
 					expectingARPReply = 0;
+					arpWaitHavePacket = 0;
+					free(arpWaitIPPacket);
 				}
 
 				free(payload);
@@ -1464,6 +1487,9 @@ void ActAsRouter(RouterInfo *routerInfo)
 						arpWaitHost = targetHost[0];
 						arpWaitHavePacket = 1;
 						arpWaitIPPacket = ipPacket;
+						arpWaitSourceMAC = sourceMAC;
+						arpWaitProtocol = (unsigned char)PING_PROTOCOL;
+						arpWaitSendInterface = sendInterface;
 						expectingARPReply = 1;
 						gettimeofday(&arpStartTime, NULL);
 					}
