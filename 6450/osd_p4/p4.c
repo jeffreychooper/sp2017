@@ -29,8 +29,9 @@
 #define MACSEND_FLAG 2
 #define ARPTEST_FLAG 3
 #define ARPPRT_FLAG 4
+#define ROUTE_FLAG 5
 
-#define DEF_ROUTE = 255
+#define DEF_ROUTE 255
 
 // switch information
 typedef struct {
@@ -191,9 +192,14 @@ int main(int argc, char *argv[])
 				}
 			}
 
+			int isRoute = 0;
+
 			if(p = strtok(line, " \t"))
 			{
 				strcpy(operations[lineCount][0], p);
+
+				if(strcmp(operations[lineCount][0], "route") == 0)
+					isRoute = 1;
 
 				if(strcmp(operations[lineCount][0], "prt") == 0)
 				{
@@ -211,8 +217,15 @@ int main(int argc, char *argv[])
 						else
 							break;
 					}
+
+					if(isRoute && tokenIndex <= 4)
+					{
+						// put in a default gateway
+						strcpy(operations[lineCount][tokenIndex], "255.255");
+					}
 				}
 
+				isRoute = 0;
 				numOperations++;
 				lineCount++;
 			}
@@ -724,6 +737,73 @@ int main(int argc, char *argv[])
 			charBuffer[0] = ARPPRT_FLAG;
 			write(deviceInterface, (void *)&charBuffer, 1);
 		}
+		else if(strcmp(operations[operationsIndex][0], "route") == 0)
+		{
+			// get the target host or router's name
+			char targetName[NAME_LENGTH];
+			strcpy(&targetName[0], operations[operationsIndex][1]);
+
+			// find which host or router it is
+			int deviceInterface = 0;
+
+			for(int deviceIndex = 0; deviceIndex < numRouters; deviceIndex++)
+			{
+				if(strcmp(routers[deviceIndex].name, targetName) == 0)
+				{
+					deviceInterface = routerControlFDs[deviceIndex];
+					break;
+				}
+			}
+
+			if(!deviceInterface)
+			{
+				for(int deviceIndex = 0; deviceIndex < numHosts; deviceIndex++)
+				{
+					if(strcmp(hosts[deviceIndex].name, targetName) == 0)
+					{
+						deviceInterface = hostControlFDs[deviceIndex];
+						break;
+					}
+				}
+			}
+
+			// tell the target we're sending routing info
+			unsigned char charBuffer[1];
+			charBuffer[0] = ROUTE_FLAG;
+			write(deviceInterface, (void *)&charBuffer, 1);
+
+			// tell the target the destination network
+			if(strcmp(operations[operationsIndex][2], "def") == 0)
+			{
+				charBuffer[0] = DEF_ROUTE;
+			}
+			else
+			{
+				charBuffer[0] = (unsigned char)atoi(operations[operationsIndex][2]);
+			}
+			write(deviceInterface, (void *)&charBuffer, 1);
+
+			// tell the target the source MAC
+			charBuffer[0] = (unsigned char)atoi(operations[operationsIndex][3]);
+			write(deviceInterface, (void *)&charBuffer, 1);
+			
+			// IP
+			char *p;
+			if(p = strtok(operations[operationsIndex][4], "."))
+			{
+				// network part of IP
+				charBuffer[0] = (unsigned char)atoi(p);
+				write(deviceInterface, (void *)&charBuffer, 1);
+
+				if(p = strtok(NULL, " \0"))
+				{
+					// host part of IP
+					charBuffer[0] = (unsigned char)atoi(p);
+					write(deviceInterface, (void *)&charBuffer, 1);
+					printf("%d\n", charBuffer[0]);
+				}
+			}
+		}
 
 		operationsIndex++;
 	}
@@ -1191,6 +1271,24 @@ void ActAsRouter(RouterInfo *routerInfo)
 					}
 				}
 			}
+			else if(buffer[0] == ROUTE_FLAG)
+			{
+				unsigned char charBuffer[1];
+
+				read(routerInfo->interpreterFD, (void *)&charBuffer[0], 1);
+				routerInfo->routeTableDestNet[routerInfo->routeTableIndex] = charBuffer[0];
+
+				read(routerInfo->interpreterFD, (void *)&charBuffer[0], 1);
+				routerInfo->routeTableSourceMAC[routerInfo->routeTableIndex] = charBuffer[0];
+
+				read(routerInfo->interpreterFD, (void *)&charBuffer[0], 1);
+				routerInfo->routeTableGateNet[routerInfo->routeTableIndex] = charBuffer[0];
+
+				read(routerInfo->interpreterFD, (void *)&charBuffer[0], 1);
+				routerInfo->routeTableGateHost[routerInfo->routeTableIndex] = charBuffer[0];
+
+				routerInfo->routeTableIndex++;
+			}
 		}
 	}
 }
@@ -1434,6 +1532,24 @@ void ActAsHost(HostInfo *hostInfo)
 					}
 
 				}
+			}
+			else if(buffer[0] == ROUTE_FLAG)
+			{
+				unsigned char charBuffer[1];
+
+				read(hostInfo->interpreterFD, (void *)&charBuffer[0], 1);
+				hostInfo->routeTableDestNet[hostInfo->routeTableIndex] = charBuffer[0];
+
+				read(hostInfo->interpreterFD, (void *)&charBuffer[0], 1);
+				hostInfo->routeTableSourceMAC[hostInfo->routeTableIndex] = charBuffer[0];
+				
+				read(hostInfo->interpreterFD, (void *)&charBuffer[0], 1);
+				hostInfo->routeTableGateNet[hostInfo->routeTableIndex] = charBuffer[0];
+
+				read(hostInfo->interpreterFD, (void *)&charBuffer[0], 1);
+				hostInfo->routeTableGateHost[hostInfo->routeTableIndex] = charBuffer[0];
+
+				hostInfo->routeTableIndex++;
 			}
 		}
 	}
