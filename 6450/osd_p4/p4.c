@@ -30,6 +30,8 @@
 #define ARPTEST_FLAG 3
 #define ARPPRT_FLAG 4
 #define ROUTE_FLAG 5
+#define PING_FLAG 6
+#define TR_FLAG 7
 
 #define DEF_ROUTE 255
 
@@ -61,7 +63,7 @@ unsigned char routeTableDestNet[6];
 unsigned char routeTableSourceMAC[6];
 unsigned char routeTableGateNet[6];
 unsigned char routeTableGateHost[6];
-int routeTableIndex;
+int routeTableCount;
 
 } RouterInfo;
 
@@ -82,7 +84,7 @@ unsigned char routeTableDestNet[6];
 unsigned char routeTableSourceMAC[6];
 unsigned char routeTableGateNet[6];
 unsigned char routeTableGateHost[6];
-int routeTableIndex;
+int routeTableCount;
 
 } HostInfo;
 
@@ -804,6 +806,81 @@ int main(int argc, char *argv[])
 				}
 			}
 		}
+		else if(strcmp(operations[operationsIndex][0], "iptest") == 0)
+		{
+			// get the target host or router's name
+			char targetName[NAME_LENGTH];
+			strcpy(&targetName[0], operations[operationsIndex][1]);
+
+			// find which host or router it is
+			int deviceInterface = 0;
+
+			for(int deviceIndex = 0; deviceIndex < numRouters; deviceIndex++)
+			{
+				if(strcmp(routers[deviceIndex].name, targetName) == 0)
+				{
+					deviceInterface = routerControlFDs[deviceIndex];
+					break;
+				}
+			}
+
+			if(!deviceInterface)
+			{
+				for(int deviceIndex = 0; deviceIndex < numHosts; deviceIndex++)
+				{
+					if(strcmp(hosts[deviceIndex].name, targetName) == 0)
+					{
+						deviceInterface = hostControlFDs[deviceIndex];
+						break;
+					}
+				}
+			}
+
+			// tell the target to do an iptest
+			unsigned char charBuffer[1];
+			charBuffer[0] = PING_FLAG;
+			write(deviceInterface, (void *)&charBuffer, 1);
+
+			// tell the target who to look for (either a host starting with h or an IP)
+			if(operations[operationsIndex][2][0] == 'h')
+			{
+				int toHostIndex;
+
+				for(toHostIndex = 0; toHostIndex < numHosts; toHostIndex++)
+				{
+					if(strcmp(hosts[toHostIndex].name, operations[operationsIndex][2]) == 0)
+						break;
+				}
+
+				charBuffer[0] = hosts[toHostIndex].netIP;
+				write(deviceInterface, (void *)&charBuffer, 1);
+
+				charBuffer[0] = hosts[toHostIndex].hostIP;
+				write(deviceInterface, (void *)&charBuffer, 1);
+			}
+			else
+			{
+				char *p;
+				if(p = strtok(operations[operationsIndex][4], "."))
+				{
+					// network part of IP
+					charBuffer[0] = (unsigned char)atoi(p);
+					write(deviceInterface, (void *)&charBuffer, 1);
+
+					if(p = strtok(NULL, " \0"))
+					{
+						// host part of IP
+						charBuffer[0] = (unsigned char)atoi(p);
+						write(deviceInterface, (void *)&charBuffer, 1);
+						printf("%d\n", charBuffer[0]);
+					}
+				}
+			}
+		}
+		else if(strcmp(operations[operationsIndex][0], "trtest") == 0)
+		{
+
+		}
 
 		operationsIndex++;
 	}
@@ -1276,18 +1353,46 @@ void ActAsRouter(RouterInfo *routerInfo)
 				unsigned char charBuffer[1];
 
 				read(routerInfo->interpreterFD, (void *)&charBuffer[0], 1);
-				routerInfo->routeTableDestNet[routerInfo->routeTableIndex] = charBuffer[0];
+				routerInfo->routeTableDestNet[routerInfo->routeTableCount] = charBuffer[0];
 
 				read(routerInfo->interpreterFD, (void *)&charBuffer[0], 1);
-				routerInfo->routeTableSourceMAC[routerInfo->routeTableIndex] = charBuffer[0];
+				routerInfo->routeTableSourceMAC[routerInfo->routeTableCount] = charBuffer[0];
 
 				read(routerInfo->interpreterFD, (void *)&charBuffer[0], 1);
-				routerInfo->routeTableGateNet[routerInfo->routeTableIndex] = charBuffer[0];
+				routerInfo->routeTableGateNet[routerInfo->routeTableCount] = charBuffer[0];
 
 				read(routerInfo->interpreterFD, (void *)&charBuffer[0], 1);
-				routerInfo->routeTableGateHost[routerInfo->routeTableIndex] = charBuffer[0];
+				routerInfo->routeTableGateHost[routerInfo->routeTableCount] = charBuffer[0];
 
-				routerInfo->routeTableIndex++;
+				routerInfo->routeTableCount++;
+			}
+			else if(buffer[0] == PING_FLAG)
+			{
+				unsigned char targetNet[1];
+				unsigned char targetHost[1];
+
+				read(routerInfo->interpreterFD, (void *)&targetNet[0], 1);
+				read(routerInfo->interpreterFD, (void *)&targetHost[0], 1);
+
+				int targetRouteIndex = -1;
+
+				for(int i = 0; i < routeTableCount; i++)
+				{
+					if(routeTableDestNet[i] == targetNet || routeTableDestNet[i] == DEF_ROUTE)
+					{
+						targetRouteIndex = i;
+						break;
+					}
+				}
+
+				if(targetRouteIndex == -1)
+				{
+					printf("%s: **** no route to host: %d.%d\n", routerInfo->name, targetNet[0], targetHost[0]);
+				}
+				else
+				{
+
+				}
 			}
 		}
 	}
@@ -1538,18 +1643,18 @@ void ActAsHost(HostInfo *hostInfo)
 				unsigned char charBuffer[1];
 
 				read(hostInfo->interpreterFD, (void *)&charBuffer[0], 1);
-				hostInfo->routeTableDestNet[hostInfo->routeTableIndex] = charBuffer[0];
+				hostInfo->routeTableDestNet[hostInfo->routeTableCount] = charBuffer[0];
 
 				read(hostInfo->interpreterFD, (void *)&charBuffer[0], 1);
-				hostInfo->routeTableSourceMAC[hostInfo->routeTableIndex] = charBuffer[0];
+				hostInfo->routeTableSourceMAC[hostInfo->routeTableCount] = charBuffer[0];
 				
 				read(hostInfo->interpreterFD, (void *)&charBuffer[0], 1);
-				hostInfo->routeTableGateNet[hostInfo->routeTableIndex] = charBuffer[0];
+				hostInfo->routeTableGateNet[hostInfo->routeTableCount] = charBuffer[0];
 
 				read(hostInfo->interpreterFD, (void *)&charBuffer[0], 1);
-				hostInfo->routeTableGateHost[hostInfo->routeTableIndex] = charBuffer[0];
+				hostInfo->routeTableGateHost[hostInfo->routeTableCount] = charBuffer[0];
 
-				hostInfo->routeTableIndex++;
+				hostInfo->routeTableCount++;
 			}
 		}
 	}
