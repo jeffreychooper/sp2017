@@ -1109,13 +1109,17 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
 				{
 					if(rankIndex != MPI_World_rank)
 					{
-						if(!ConnectedToCommRank(comm, rankIndex))
-							ConnectToCommRank(comm, rankIndex);
+						while(!ConnectedToCommRank(comm, root))
+							while(ProgressEngine(MPI_My_accept_socket))
+								;
 
 						ReadFromCommRank(comm, rankIndex, &sumBuffer[rankIndex], sizeof(int));
 					}
 					else
 					{
+						if(!ConnectedToCommRank(comm, rankIndex))
+							ConnectToCommRank(comm, rankIndex);
+
 						memcpy(&sumBuffer[rankIndex], &((int *)sendbuf)[countIndex], sizeof(int));
 					}
 				}
@@ -1126,9 +1130,6 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
 			else
 			{
 				// send value to root
-				while(!ConnectedToCommRank(comm, root))
-					while(ProgressEngine(MPI_My_accept_socket))
-						;
 
 				WriteToCommRank(comm, root, &((int *)sendbuf)[countIndex], sizeof(int));
 			}
