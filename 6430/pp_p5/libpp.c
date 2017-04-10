@@ -1109,7 +1109,7 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
 				{
 					if(rankIndex != MPI_World_rank)
 					{
-						while(!ConnectedToCommRank(comm, root))
+						while(!ConnectedToCommRank(comm, rankIndex))
 							while(ProgressEngine(MPI_My_accept_socket))
 								;
 
@@ -1122,21 +1122,75 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
 				}
 
 				// sum up the values in the buffer
+				int finalSum = 0;
+
+				for(int rankIndex = 0; rankIndex < MPI_World_size; rankIndex++)
+					finalSum += sumBuffer[rankIndex];
+
 				// put the sum in the recvbuf
+				((int *)recvbuf)[countIndex] = finalSum;
+
+				free(sumBuffer);
 			}
 			else
 			{
 				// send value to root
-				if(!ConnectedToCommRank(comm, rankIndex))
-					ConnectToCommRank(comm, rankIndex);
+				if(!ConnectedToCommRank(comm, root))
+					ConnectToCommRank(comm, root);
 
 				WriteToCommRank(comm, root, &((int *)sendbuf)[countIndex], sizeof(int));
 			}
 		}
 
 		// do a double-loop to make sure we're all done
+		int prevRank = MPI_World_rank - 1;
+		int nextRank = MPI_World_rank + 1;
+		int buf;
 
-		free(sumBuffer);
+		if(prevRank < 0)
+			prevRank = MPI_World_size - 1;
+
+		if(nextRank == MPI_World_size)
+			nextRank = 0;
+
+		if(MPI_World_rank == root)
+		{
+			if(!ConnectedToCommRank(comm, nextRank))
+				ConnectToCommRank(comm, nextRank);
+
+			buf = LOOP_ONE_FLAG;
+			WriteToCommRank(comm, nextRank, &buf, sizeof(int));
+
+			while(!ConnectedToCommRank(comm, prevRank))
+				while(ProgressEngine(MPI_My_accept_socket))
+					;
+
+			ReadFromCommRank(comm, prevRank, &buf, sizeof(int));
+
+			buf = LOOP_TWO_FLAG;
+			WriteToCommRank(comm, nextRank, &buf, sizeof(int));
+
+			ReadFromCommRank(comm, prevRank, &buf, sizeof(int));
+		}
+		else
+		{
+			while(!ConnectedToCommRank(comm, prevRank))
+				while(ProgressEngine(MPI_My_accept_socket))
+					;
+
+			ReadFromCommRank(comm, prevRank, &buf, sizeof(int));
+
+			if(!ConnectedToCommRank(comm, nextRank))
+				ConnectToCommRank(comm, nextRank);
+
+			buf = LOOP_ONE_FLAG;
+			WriteToCommRank(comm, nextRank, &buf, sizeof(int));
+
+			ReadFromCommRank(comm, prevRank, &buf, sizeof(int));
+
+			buf = LOOP_TWO_FLAG;
+			WriteToCommRank(comm, nextRank, &buf, sizeof(int));
+		}
 	}
 
 	return MPI_SUCCESS;
