@@ -79,6 +79,9 @@ int MPI_Num_requests = 0;
 MPI_Request_info *MPI_First_request_pointer;
 MPI_Request_info *MPI_Last_request_pointer;
 
+int MPI_Num_user_ops = 0;
+MPI_User_function *MPI_User_ops[5];
+
 void ErrorCheck(int val, char *str);
 int SetupAcceptSocket();
 int ProgressEngine(int blockingSocket);		// sometimes, we'll want to block on some certain socket... so we'll select on it in particular. will return 0 when successful
@@ -1197,13 +1200,126 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
 			WriteToCommRank(comm, nextRank, &buf, sizeof(int));
 		}
 	}
+	else
+	{
+		// if root, get a buffer to hold enough elements for each rank... note datatype is always int
+		int *sumBuffer;
+
+		if(MPI_World_rank == root)
+			sumBuffer = malloc(count * sizeof(int));
+
+		// for each count
+		for(int countIndex = 0; countIndex < count; countIndex++)
+		{
+			// if root
+			if(MPI_World_rank == root)
+			{
+				// receive from all the others into the buffer, also put your own in the buffer
+				for(int rankIndex = 0; rankIndex < MPI_World_size; rankIndex++)
+				{
+					if(rankIndex != MPI_World_rank)
+					{
+						while(!ConnectedToCommRank(comm, rankIndex))
+							while(ProgressEngine(MPI_My_accept_socket))
+								;
+
+						WriteToCommRank(comm, rankIndex, &sumBuffer[0], sizeof(int));
+
+						ReadFromCommRank(comm, rankIndex, &sumBuffer[rankIndex], sizeof(int));
+					}
+					else
+					{
+						memcpy(&sumBuffer[rankIndex], &((int *)sendbuf)[countIndex], sizeof(int));
+					}
+				}
+
+				// sum up the values in the buffer
+				int finalSum = 0;
+
+				int one = 1;
+
+				for(int rankIndex = 0; rankIndex < MPI_World_size; rankIndex++)
+					MPI_User_ops[op](&sumBuffer[rankIndex], &finalSum, &one, &datatype);
+
+				// put the sum in the recvbuf
+				((int *)recvbuf)[countIndex] = finalSum;
+
+				free(sumBuffer);
+			}
+			else
+			{
+				// send value to root
+				if(!ConnectedToCommRank(comm, root))
+					ConnectToCommRank(comm, root);
+
+				int buf;
+
+				ReadFromCommRank(comm, root, &buf, sizeof(int));
+				WriteToCommRank(comm, root, &((int *)sendbuf)[countIndex], sizeof(int));
+			}
+		}
+
+		// do a double-loop to make sure we're all done
+		int prevRank = MPI_World_rank - 1;
+		int nextRank = MPI_World_rank + 1;
+		int buf;
+
+		if(prevRank < 0)
+			prevRank = MPI_World_size - 1;
+
+		if(nextRank == MPI_World_size)
+			nextRank = 0;
+
+		if(MPI_World_rank == root)
+		{
+			if(!ConnectedToCommRank(comm, nextRank))
+				ConnectToCommRank(comm, nextRank);
+
+			buf = LOOP_ONE_FLAG;
+			WriteToCommRank(comm, nextRank, &buf, sizeof(int));
+
+			while(!ConnectedToCommRank(comm, prevRank))
+				while(ProgressEngine(MPI_My_accept_socket))
+					;
+
+			ReadFromCommRank(comm, prevRank, &buf, sizeof(int));
+
+			buf = LOOP_TWO_FLAG;
+			WriteToCommRank(comm, nextRank, &buf, sizeof(int));
+
+			ReadFromCommRank(comm, prevRank, &buf, sizeof(int));
+		}
+		else
+		{
+			while(!ConnectedToCommRank(comm, prevRank))
+				while(ProgressEngine(MPI_My_accept_socket))
+					;
+
+			ReadFromCommRank(comm, prevRank, &buf, sizeof(int));
+
+			if(!ConnectedToCommRank(comm, nextRank))
+				ConnectToCommRank(comm, nextRank);
+
+			buf = LOOP_ONE_FLAG;
+			WriteToCommRank(comm, nextRank, &buf, sizeof(int));
+
+			ReadFromCommRank(comm, prevRank, &buf, sizeof(int));
+
+			buf = LOOP_TWO_FLAG;
+			WriteToCommRank(comm, nextRank, &buf, sizeof(int));
+		}
+	}
 
 	return MPI_SUCCESS;
 }
 
 int MPI_Op_create(MPI_User_function *user_fn, int commute, MPI_Op *op)
 {
+	MPI_User_ops[MPI_Num_user_ops] = user_fn;
 
+	*op = MPI_Num_user_ops;
+
+	MPI_Num_user_ops++;
 
 	return MPI_SUCCESS;
 }
