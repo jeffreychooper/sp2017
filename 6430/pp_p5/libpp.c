@@ -1117,9 +1117,6 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
 					}
 					else
 					{
-						if(!ConnectedToCommRank(comm, rankIndex))
-							ConnectToCommRank(comm, rankIndex);
-
 						memcpy(&sumBuffer[rankIndex], &((int *)sendbuf)[countIndex], sizeof(int));
 					}
 				}
@@ -1130,6 +1127,8 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
 			else
 			{
 				// send value to root
+				if(!ConnectedToCommRank(comm, rankIndex))
+					ConnectToCommRank(comm, rankIndex);
 
 				WriteToCommRank(comm, root, &((int *)sendbuf)[countIndex], sizeof(int));
 			}
