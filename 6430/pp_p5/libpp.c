@@ -1085,9 +1085,9 @@ int MPI_Wait(MPI_Request *request, MPI_Status *status)
 int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, MPI_Op op, int root, MPI_Comm comm)
 {
 	#if DEBUG
-	int debugFlag = 1;
-	while(debugFlag)
-		;
+	// int debugFlag = 1;
+	// while(debugFlag)
+	// 	;
 	#endif
 
 	if(op == MPI_SUM)
@@ -1614,6 +1614,7 @@ int ConnectedToCommRank(MPI_Comm comm, int dest)
 void ConnectToCommRank(MPI_Comm comm, int dest)
 {
 	int rc;
+	int buf;
 
 	// TODO: fix this section if we do anything other than duping comms
 	// tell ppexec I need to connect to someone

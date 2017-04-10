@@ -277,6 +277,23 @@ int main(int argc, char *argv[])
 		if(rc == -1 && errno == EINTR)
 			continue;
 
+		if(FD_ISSET(acceptSocket, &readFDs))
+		{
+			int newSocketFD = AcceptConnection(acceptSocket);
+			
+			// get child's rank, host, and port
+			int newSocketRank;
+			read(newSocketFD, (void *)&newSocketRank, sizeof(int));
+			ranks[newSocketRank].controlSocket = newSocketFD;
+
+			int hostLength;
+			read(newSocketFD, (void *)&hostLength, sizeof(int));
+
+			read(newSocketFD, (void *)&ranks[newSocketRank].host, hostLength);
+
+			read(newSocketFD, (void *)&ranks[newSocketRank].port, sizeof(int));
+		}
+
 		for(int i = 0; i < numRanks; i++)
 		{
 			int rankSocket = ranks[i].controlSocket;
@@ -291,6 +308,7 @@ int main(int argc, char *argv[])
 				{
 					int requestedComm;
 					int requestedRank;
+					int buf = 0;
 
 					read(rankSocket, (void *)&requestedComm, sizeof(int));
 
@@ -376,23 +394,6 @@ int main(int argc, char *argv[])
 					}
 				}
 			}
-		}
-
-		if(FD_ISSET(acceptSocket, &readFDs))
-		{
-			int newSocketFD = AcceptConnection(acceptSocket);
-			
-			// get child's rank, host, and port
-			int newSocketRank;
-			read(newSocketFD, (void *)&newSocketRank, sizeof(int));
-			ranks[newSocketRank].controlSocket = newSocketFD;
-
-			int hostLength;
-			read(newSocketFD, (void *)&hostLength, sizeof(int));
-
-			read(newSocketFD, (void *)&ranks[newSocketRank].host, hostLength);
-
-			read(newSocketFD, (void *)&ranks[newSocketRank].port, sizeof(int));
 		}
 	}
 
