@@ -1,0 +1,38 @@
+
+                        Operating Systems Design
+                              Spring 2017
+                               Project 5
+
+
+turnin id:  osd_p5
+
+
+TCP layer
+
+    We will not be concerned about providing reliability, and thus do not
+    need to provide sequence numbers for packets, etc.
+
+    tcptest h1 h2 201 the_payload    # usable port numbers are 100-999
+        causes a msg to be sent from h1 to h2;
+        h2 prints when the message is received:
+            h2 received tcptest from h1 for port 201 the_payload
+        
+
+APP layer
+
+    We will assume that there is an ftpd running at every host.
+    You can have them at routers also, but we will not test that.
+    An ftpd is only able to receive data, it does not send data.
+    An ftpd does NOT print any info until a connection is closed,
+    at which point it prints all the data sent to it on the given
+    connection.
+
+    ftpd_conn h1 h2 201
+        causes h1 to request a connection to the ftpd at h2:201
+
+    ftp_send h1 h2 201  data----1
+    ftp_send h1 h2 201  data----2
+        cause data to be sent from h1 to to the ftpd at h2:201 
+
+    ftp_done h1 h2 201
+        h1 tells h2 to terminate the conn to ftpd at h2:201

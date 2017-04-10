@@ -1099,7 +1099,9 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
 		int *sumBuffer;
 
 		if(MPI_World_rank == root)
+		{
 			sumBuffer = malloc(count * sizeof(int));
+		}
 
 		// for each count
 		for(int countIndex = 0; countIndex < count; countIndex++)
@@ -1134,8 +1136,6 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
 
 				// put the sum in the recvbuf
 				((int *)recvbuf)[countIndex] = finalSum;
-
-				free(sumBuffer);
 			}
 			else
 			{
@@ -1199,6 +1199,9 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
 			buf = LOOP_TWO_FLAG;
 			WriteToCommRank(comm, nextRank, &buf, sizeof(int));
 		}
+
+		if(MPI_World_rank == root)
+			free(sumBuffer);
 	}
 	else
 	{
@@ -1243,8 +1246,6 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
 
 				// put the sum in the recvbuf
 				((int *)recvbuf)[countIndex] = finalSum;
-
-				free(sumBuffer);
 			}
 			else
 			{
@@ -1308,7 +1309,11 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
 			buf = LOOP_TWO_FLAG;
 			WriteToCommRank(comm, nextRank, &buf, sizeof(int));
 		}
+
+		if(MPI_World_rank == root)
+			free(sumBuffer);
 	}
+
 
 	return MPI_SUCCESS;
 }
