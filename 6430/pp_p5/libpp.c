@@ -1085,9 +1085,9 @@ int MPI_Wait(MPI_Request *request, MPI_Status *status)
 int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, MPI_Op op, int root, MPI_Comm comm)
 {
 	#if DEBUG
-	// int debugFlag = 1;
-	// while(debugFlag)
-	// 	;
+	int debugFlag = 1;
+	while(debugFlag)
+	 	;
 	#endif
 
 	if(op == MPI_SUM)
@@ -1112,6 +1112,8 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
 						while(!ConnectedToCommRank(comm, rankIndex))
 							while(ProgressEngine(MPI_My_accept_socket))
 								;
+
+						WriteToCommRank(comm, rankIndex, &sumBuffer[0], sizeof(int));
 
 						ReadFromCommRank(comm, rankIndex, &sumBuffer[rankIndex], sizeof(int));
 					}
@@ -1138,6 +1140,9 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
 				if(!ConnectedToCommRank(comm, root))
 					ConnectToCommRank(comm, root);
 
+				int buf;
+
+				ReadFromCommRank(comm, root, &buf, sizeof(int));
 				WriteToCommRank(comm, root, &((int *)sendbuf)[countIndex], sizeof(int));
 			}
 		}
