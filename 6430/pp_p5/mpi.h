@@ -13,6 +13,9 @@ typedef int MPI_Request;
 
 typedef int MPI_Aint;
 
+/* User combination function */
+typedef void (MPI_User_function) ( void *, void *, int *, MPI_Datatype * ); 
+
 /* Collective operations */
 typedef int MPI_Op;
 
@@ -94,3 +97,4 @@ int MPI_Put(void *, int, MPI_Datatype, int, MPI_Aint, int, MPI_Datatype, MPI_Win
 int MPI_Win_create(void *, MPI_Aint, int, MPI_Info, MPI_Comm, MPI_Win *);
 int MPI_Win_lock(int, int, int, MPI_Win);
 int MPI_Win_unlock(int, MPI_Win);
+int MPI_Op_create(MPI_User_function *user_fn, int commute, MPI_Op *op);

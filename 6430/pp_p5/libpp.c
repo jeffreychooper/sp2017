@@ -687,12 +687,6 @@ int MPI_Comm_dup(MPI_Comm comm, MPI_Comm *newComm)
 // TODO: I'm doing this the lazy way... root will just select on the others and put their info in the buffer as it comes
 int MPI_Gather(void *sendbuf, int sendcnt, MPI_Datatype sendtype, void *recvbuf, int recvcnt, MPI_Datatype recvtype, int root, MPI_Comm comm)
 {
-	#if DEBUG
-	int debug = 0;
-	while(!debug)
-		;
-	#endif
-
 	if(MPI_World_rank == root)
 	{
 		// TODO: really bad way of doing this...
@@ -1084,6 +1078,73 @@ int MPI_Wait(MPI_Request *request, MPI_Status *status)
 	}
 
 	DeleteRequestInfo(requestInfo);
+
+	return MPI_SUCCESS;
+}
+
+int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, MPI_Op op, int root, MPI_Comm comm)
+{
+	#if DEBUG
+	int debugFlag = 1;
+	while(debugFlag)
+		;
+	#endif
+
+	if(op == MPI_SUM)
+	{
+		// if root, get a buffer to hold enough elements for each rank... note datatype is always int
+		int *sumBuffer;
+
+		if(MPI_World_rank == root)
+			sumBuffer = malloc(count * sizeof(int));
+
+		// for each count
+		for(int countIndex = 0; countIndex < count; countIndex++)
+		{
+			// if root
+			if(MPI_World_rank == root)
+			{
+				// receive from all the others into the buffer, also put your own in the buffer
+				for(int rankIndex = 0; rankIndex < MPI_World_size; rankIndex++)
+				{
+					if(rankIndex != MPI_World_rank)
+					{
+						if(!ConnectedToCommRank(comm, rankIndex))
+							ConnectToCommRank(comm, rankIndex);
+
+						ReadFromCommRank(comm, rankIndex, &sumBuffer[rankIndex], sizeof(int));
+					}
+					else
+					{
+						memcpy(&sumBuffer[rankIndex], &((int *)sendbuf)[countIndex], sizeof(int));
+					}
+				}
+
+				// sum up the values in the buffer
+				// put the sum in the recvbuf
+			}
+			else
+			{
+				// send value to root
+				while(!ConnectedToCommRank(comm, root))
+					while(ProgressEngine(MPI_My_accept_socket))
+						;
+
+				WriteToCommRank(comm, root, &((int *)sendbuf)[countIndex], sizeof(int));
+			}
+		}
+
+		// do a double-loop to make sure we're all done
+
+		free(sumBuffer);
+	}
+
+	return MPI_SUCCESS;
+}
+
+int MPI_Op_create(MPI_User_function *user_fn, int commute, MPI_Op *op)
+{
+
 
 	return MPI_SUCCESS;
 }

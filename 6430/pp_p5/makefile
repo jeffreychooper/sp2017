@@ -20,5 +20,13 @@ P5TEST2: libpp.a
 P5TEST3: libpp.a
 	$(CC) $(CFLAGS) -o P5TEST3 P5TEST3.c $(PPLIBS)
 
+debug:
+	$(CC) $(DEBUGFLAGS) -c -o libpp.o libpp.c
+	ar rvf libpp.a libpp.o
+	$(CC) $(DEBUGFLAGS) -o P5TEST1 P5TEST1.c $(PPLIBS)
+	$(CC) $(DEBUGFLAGS) -o P5TEST2 P5TEST2.c $(PPLIBS)
+	$(CC) $(DEBUGFLAGS) -o P5TEST3 P5TEST3.c $(PPLIBS)
+	$(CC) $(DEBUGFLAGS) -o ppexec ppexec.c
+
 clean:
 	rm -f ppexec *.o *.a P5TEST?
