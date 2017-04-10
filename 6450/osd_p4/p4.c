@@ -1526,9 +1526,10 @@ void ActAsRouter(RouterInfo *routerInfo)
 								interfaceIndex++;
 							}
 			
-							char *ipPayload = "";
+							char *ipPayload = calloc(MAX_IP_PACKET_SIZE - 7, sizeof(char));
+							strncpy(ipPayload, &payload[7], strlen(payload) - 7);
 							char *ipPacket = CreateIPPacket(7 + strlen(ipPayload),
-															6,
+															payload[1],
 															TR_PROTOCOL,
 															payload[3],
 															payload[4],
@@ -2353,7 +2354,8 @@ void ActAsHost(HostInfo *hostInfo)
 								unsigned char sourceMAC = hostInfo->routeTableSourceMAC[targetRouteIndex];
 								int sendInterface = hostInfo->interface;
 
-								char *ipPayload = "";
+								char *ipPayload = calloc(MAX_IP_PACKET_SIZE - 7, sizeof(char));
+								strncpy(ipPayload, &payload[7], strlen(payload) - 7);
 								char *ipPacket = CreateIPPacket(7 + strlen(ipPayload),
 																6,
 																TR_PROTOCOL,
