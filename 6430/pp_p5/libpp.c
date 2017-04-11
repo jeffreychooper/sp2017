@@ -1100,7 +1100,7 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
 
 		if(MPI_World_rank == root)
 		{
-			sumBuffer = malloc(count * sizeof(int));
+			sumBuffer = malloc(MPI_World_size * sizeof(int));
 		}
 
 		// for each count
