@@ -1,0 +1,83 @@
+vs  s1  1
+vs  s2  2
+vh  h1  101 1.1
+vh  h2  102 2.2
+vh  h3  103 1.3
+vr  r1  104 1.4  105 2.1
+
+route  h1  1  101
+route  h1  def  101  1.4
+
+route  h2  def  102  2.1
+
+route  h3  1  103
+route  h3  def  103  1.4
+
+route  r1  1  104
+route  r1  2  105
+
+
+prt hello world
+prt
+
+
+tcptest h1 h2 201 some_payload
+pause 2
+
+
+ftp_send h1 h2 101  h1_h2_101_first_msg    ## FAILS due to no connection
+pause 2
+
+
+ftpd_conn h1 h2 101
+pause 2
+
+ftpd_conn h1 h2 201
+pause 2
+
+ftpd_conn h3 h2 301
+pause 2
+
+
+ftp_send h1 h2 101  h1_h2_101_first_msg
+pause 2
+
+ftp_send h3 h2 301  h3_h2_301_msg_01
+pause 2
+
+ftp_send h1 h2 101  h1_h2_101_second_msg
+pause 2
+
+ftp_send h1 h2 201  h1_h2_201_msg_one
+pause 2
+
+ftp_send h3 h2 301  h3_h2_301_msg_02
+pause 2
+
+ftp_send h1 h2 101  h1_h2_101_third_msg
+pause 2
+
+ftp_send h1 h2 201  h1_h2_201_msg_two
+pause 2
+
+ftp_done h1 h2 101
+pause 4
+
+ftp_send h1 h2 201  h1_h2_201_msg_three
+pause 2
+
+ftp_send h3 h2 301  h3_h2_301_msg_03
+pause 2
+
+ftp_send h1 h2 201  h1_h2_201_msg_four
+pause 2
+
+
+ftp_done h1 h2 201
+pause 4
+
+ftp_send h1 h2 101  h1_h2_101_first_msg    ## FAILS due to no connection
+pause 2
+
+ftp_done h3 h2 301
+pause 4
