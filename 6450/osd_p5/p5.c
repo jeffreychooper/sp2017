@@ -2443,7 +2443,7 @@ void ActAsHost(HostInfo *hostInfo)
 	// tcp data
 	int activePorts[MAX_ACTIVE_PORTS] = { 0 };
 	char tcpMessages[MAX_ACTIVE_PORTS][MAX_TCP_MESSAGES][TCP_PAYLOAD_SIZE];
-	int tcpNumMessages = 0;
+	int tcpNumMessages[MAX_ACTIVE_PORTS] = { 0 };
 
 	while(!done)
 	{
@@ -3112,8 +3112,9 @@ void ActAsHost(HostInfo *hostInfo)
 							}
 							else
 							{
-								strncpy(tcpMessages[portIndex][tcpNumMessages], tcpPayload, strlen(tcpPayload));
-								tcpNumMessages++;
+								int numMessages = tcpNumMessages[portIndex];
+								strncpy(tcpMessages[portIndex][numMessages], tcpPayload, strlen(tcpPayload));
+								tcpNumMessages[portIndex]++;
 							}
 
 							free(tcpPayload);
@@ -3240,8 +3241,26 @@ void ActAsHost(HostInfo *hostInfo)
 
 							// TODO: what to do for done
 							// print out a message
+							printf("%s's connection on port %d closed:\n", hostInfo->name, portNumber);
 
-							// get rid of the shit...
+							int portIndex = 0;
+
+							while(portIndex < 4)
+							{
+								if(activePorts[portIndex] == portNumber)
+									break;
+
+								portIndex++;
+							}
+
+							for(int i = 0; i < tcpNumMessages[portIndex]; i++)
+							{
+								printf("%s\n", tcpMessages[portIndex][i]);
+							}
+
+							// get rid of the info
+							activePorts[portIndex] = 0;
+							tcpNumMessages[portIndex] = 0;
 
 							free(tcpPayload);
 							free(tcpPacket);
