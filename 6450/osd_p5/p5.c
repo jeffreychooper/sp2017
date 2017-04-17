@@ -1333,7 +1333,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 						char *packetToSend = CreateEthernetPacket(GetEthernetPacketSourceMAC(buffer),
 																  routerInfo->MACs[interfaceIndex],
 																  (unsigned char)2,
-																  4 + strlen(message),
+																  4 + ETHERNET_PAYLOAD_SIZE,
 																  message);
 
 						int bytesWritten = write(routerInfo->interfaces[interfaceIndex], (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -1367,7 +1367,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 						char *packetToSend = CreateEthernetPacket(routerInfo->arpCacheMAC[index],
 																  arpWaitSourceMAC,
 																  arpWaitProtocol,
-																  4 + strlen(arpWaitIPPacket),
+																  4 + ETHERNET_PAYLOAD_SIZE,
 																  arpWaitIPPacket);
 
 						int bytesWritten = write(arpWaitSendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -1451,7 +1451,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 							}
 			
 							char *ipPayload = "";
-							char *ipPacket = CreateIPPacket(7 + strlen(ipPayload),
+							char *ipPacket = CreateIPPacket(7 + IP_PAYLOAD_SIZE,
 															6,
 															PING_PROTOCOL,
 															payload[3],
@@ -1490,7 +1490,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 								char *packetToSend = CreateEthernetPacket(255,
 																		  routerInfo->MACs[interfaceIndex],
 																		  (unsigned char)1,
-																		  4 + strlen(message),
+																		  4 + ETHERNET_PAYLOAD_SIZE,
 																		  message);
 
 								int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -1518,7 +1518,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 								char *packetToSend = CreateEthernetPacket(routerInfo->arpCacheMAC[targetArpIndex],
 																		  sourceMAC,
 																		  (unsigned char)PING_PROTOCOL,
-																		  4 + strlen(ipPacket),
+																		  4 + MAX_IP_PACKET_SIZE,
 																		  ipPacket);
 
 								int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -1599,8 +1599,8 @@ void ActAsRouter(RouterInfo *routerInfo)
 							}
 			
 							char *ipPayload = calloc(MAX_IP_PACKET_SIZE - 7, sizeof(char));
-							strncpy(ipPayload, &payload[7], strlen(payload) - 7);
-							char *ipPacket = CreateIPPacket(7 + strlen(ipPayload),
+							strncpy(ipPayload, &payload[7], MAX_IP_PACKET_SIZE - 7);
+							char *ipPacket = CreateIPPacket(7 + IP_PAYLOAD_SIZE,
 															payload[1],
 															TR_PROTOCOL,
 															payload[3],
@@ -1639,7 +1639,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 								char *packetToSend = CreateEthernetPacket(255,
 																		  routerInfo->MACs[interfaceIndex],
 																		  (unsigned char)1,
-																		  4 + strlen(message),
+																		  4 + ETHERNET_PAYLOAD_SIZE,
 																		  message);
 
 								int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -1667,7 +1667,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 								char *packetToSend = CreateEthernetPacket(routerInfo->arpCacheMAC[targetArpIndex],
 																		  sourceMAC,
 																		  (unsigned char)PING_PROTOCOL,
-																		  4 + strlen(ipPacket),
+																		  4 + MAX_IP_PACKET_SIZE,
 																		  ipPacket);
 
 								int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -1678,6 +1678,124 @@ void ActAsRouter(RouterInfo *routerInfo)
 								free(ipPacket);
 								free(packetToSend);
 							}
+						}
+					}
+				}
+				else if(buffer[2] == TCP_TEST_PROTOCOL)
+				{
+					char *ipPacket = payload;
+					char *tcpPacket = GetIPPayload(ipPacket);
+
+					unsigned char targetNetIP = ipPacket[5];
+					unsigned char targetHostIP = ipPacket[6];
+
+					int targetRouteIndex = -1;
+
+					for(int i = 0; i < routerInfo->routeTableCount; i++)
+					{
+						if(routerInfo->routeTableDestNet[i] == targetNetIP || routerInfo->routeTableDestNet[i] == DEF_ROUTE)
+						{
+							targetRouteIndex = i;
+							break;
+						}
+					}
+
+					if(targetRouteIndex != -1)
+					{
+						// find the right mac
+						unsigned char sourceMAC = routerInfo->routeTableSourceMAC[targetRouteIndex];
+						int interfaceIndex = 0;
+						int sendInterface;
+
+						while(interfaceIndex < 6 && routerInfo->interfaces[interfaceIndex])
+						{
+							if(routerInfo->MACs[interfaceIndex] == sourceMAC)
+							{
+								sendInterface = routerInfo->interfaces[interfaceIndex];
+								break;
+							}
+
+							interfaceIndex++;
+						}
+
+						char *newIPPacket = CreateIPPacket(7 + MAX_TCP_PACKET_SIZE,
+														   6,
+														   TCP_TEST_PROTOCOL,
+														   ipPacket[3],
+														   ipPacket[4],
+														   targetNetIP,
+														   targetHostIP,
+														   tcpPacket);
+
+						unsigned char targetGateNet = routerInfo->routeTableGateNet[targetRouteIndex];
+						unsigned char targetGateHost = routerInfo->routeTableGateHost[targetRouteIndex];
+
+						if(targetGateNet == 255)
+						{
+							targetGateNet = targetNetIP;
+							targetGateHost = targetHostIP;
+						}
+
+						int targetARPIndex = -1;
+
+						for(int i = 0; i < routerInfo->arpCacheCount; i++)
+						{
+							if(routerInfo->arpCacheNet[i] == targetGateNet && routerInfo->arpCacheHost[i] == targetGateHost)
+							{
+								targetARPIndex = i;
+								break;
+							}
+						}
+
+						if(targetARPIndex == -1)
+						{
+							// broadcast the request
+							unsigned char message[ETHERNET_PAYLOAD_SIZE];
+							message[0] = targetGateNet;
+							message[1] = targetGateHost;
+
+							char *packetToSend = CreateEthernetPacket(255,
+																	  sourceMAC,
+																	  (unsigned char)1,
+																	  4 + ETHERNET_PAYLOAD_SIZE,
+																	  message);
+
+							int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
+
+							while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
+								bytesWritten += write(sendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+							arpWaitNet = targetGateNet;
+							arpWaitHost = targetGateHost;
+							arpWaitHavePacket = 1;
+							arpWaitIPPacket = newIPPacket;
+							arpWaitSourceMAC = sourceMAC;
+							arpWaitProtocol = (unsigned char)TCP_TEST_PROTOCOL;
+							arpWaitFinalNet = targetNetIP;
+							arpWaitFinalHost = targetHostIP;
+							arpWaitSendInterface = sendInterface;
+							arpShouldPrint = 0;
+							expectingARPReply = 1;
+							gettimeofday(&arpStartTime, NULL);
+
+							free(packetToSend);
+						}
+						else
+						{
+							char *packetToSend = CreateEthernetPacket(routerInfo->arpCacheMAC[targetARPIndex],
+																	  sourceMAC,
+																	  (unsigned char)TCP_TEST_PROTOCOL,
+																	  4 + MAX_IP_PACKET_SIZE,
+																	  ipPacket);
+
+							int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
+
+							while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
+								bytesWritten += write(sendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+							free(packetToSend);
+							free(ipPacket);
+
 						}
 					}
 				}
@@ -1732,7 +1850,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 				char *packetToSend = CreateEthernetPacket(receiver[0],
 														  sender[0],
 														  (unsigned char)0,
-														  4 + strlen(message),
+														  4 + ETHERNET_PAYLOAD_SIZE,
 														  message);
 
 				if(receiver[0] != 255)
@@ -1792,7 +1910,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 				char *packetToSend = CreateEthernetPacket(255,
 														  routerInfo->MACs[interfaceIndex],
 														  (unsigned char)1,
-														  4 + strlen(message),
+														  4 + ETHERNET_PAYLOAD_SIZE,
 														  message);
 
 				// printf("%s: arpreq on %d: %d.%d\n", routerInfo->name, routerInfo->MACs[interfaceIndex], netIP[0], hostIP[0]);
@@ -1890,7 +2008,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 					}
 	
 					char *ipPayload = "";
-					char *ipPacket = CreateIPPacket(7 + strlen(ipPayload),
+					char *ipPacket = CreateIPPacket(7 + IP_PAYLOAD_SIZE,
 													6,
 													PING_PROTOCOL,
 													routerInfo->netIPs[interfaceIndex],
@@ -1929,7 +2047,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 						char *packetToSend = CreateEthernetPacket(255,
 																  routerInfo->MACs[interfaceIndex],
 																  (unsigned char)1,
-																  4 + strlen(message),
+																  4 + ETHERNET_PAYLOAD_SIZE,
 																  message);
 
 						int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -1957,7 +2075,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 						char *packetToSend = CreateEthernetPacket(routerInfo->arpCacheMAC[targetArpIndex],
 																  sourceMAC,
 																  (unsigned char)PING_PROTOCOL,
-																  4 + strlen(ipPacket),
+																  4 + MAX_IP_PACKET_SIZE,
 																  ipPacket);
 
 						int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -2014,7 +2132,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 					}
 	
 					char *ipPayload = "";
-					char *ipPacket = CreateIPPacket(7 + strlen(ipPayload),
+					char *ipPacket = CreateIPPacket(7 + IP_PAYLOAD_SIZE,
 													6,
 													PING_PROTOCOL,
 													routerInfo->netIPs[interfaceIndex],
@@ -2053,7 +2171,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 						char *packetToSend = CreateEthernetPacket(255,
 																  routerInfo->MACs[interfaceIndex],
 																  (unsigned char)1,
-																  4 + strlen(message),
+																  4 + ETHERNET_PAYLOAD_SIZE,
 																  message);
 
 						int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -2081,7 +2199,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 						char *packetToSend = CreateEthernetPacket(routerInfo->arpCacheMAC[targetArpIndex],
 																  sourceMAC,
 																  (unsigned char)PING_PROTOCOL,
-																  4 + strlen(ipPacket),
+																  4 + MAX_IP_PACKET_SIZE,
 																  ipPacket);
 
 						int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -2206,7 +2324,7 @@ void ActAsHost(HostInfo *hostInfo)
 							char *packetToSend = CreateEthernetPacket(GetEthernetPacketSourceMAC(buffer),
 																	  hostInfo->MAC,
 																	  (unsigned char)2,
-																	  4 + strlen(message),
+																	  4 + ETHERNET_PAYLOAD_SIZE,
 																	  message);
 							int bytesWritten = write(hostInfo->interface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
 
@@ -2239,7 +2357,7 @@ void ActAsHost(HostInfo *hostInfo)
 							char *packetToSend = CreateEthernetPacket(hostInfo->arpCacheMAC[index],
 																	  arpWaitSourceMAC,
 																	  arpWaitProtocol,
-																	  4 + strlen(arpWaitIPPacket),
+																	  4 + ETHERNET_PAYLOAD_SIZE,
 																	  arpWaitIPPacket);
 
 							int bytesWritten = write(arpWaitSendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -2301,7 +2419,7 @@ void ActAsHost(HostInfo *hostInfo)
 								int sendInterface = hostInfo->interface;
 
 								char *ipPayload = "";
-								char *ipPacket = CreateIPPacket(7 + strlen(ipPayload),
+								char *ipPacket = CreateIPPacket(7 + IP_PAYLOAD_SIZE,
 																6,
 																PING_PROTOCOL,
 																payload[3],
@@ -2340,7 +2458,7 @@ void ActAsHost(HostInfo *hostInfo)
 									char *packetToSend = CreateEthernetPacket(255,
 																			  hostInfo->MAC,
 																			  (unsigned char)1,
-																			  4 + strlen(message),
+																			  4 + ETHERNET_PAYLOAD_SIZE,
 																			  message);
 
 									int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -2368,7 +2486,7 @@ void ActAsHost(HostInfo *hostInfo)
 									char *packetToSend = CreateEthernetPacket(hostInfo->arpCacheMAC[targetArpIndex],
 																		  sourceMAC,
 																		  (unsigned char)PING_PROTOCOL,
-																		  4 + strlen(ipPacket),
+																		  4 + MAX_IP_PACKET_SIZE,
 																		  ipPacket);
 
 									int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -2427,8 +2545,8 @@ void ActAsHost(HostInfo *hostInfo)
 								int sendInterface = hostInfo->interface;
 
 								char *ipPayload = calloc(MAX_IP_PACKET_SIZE - 7, sizeof(char));
-								strncpy(ipPayload, &payload[7], strlen(payload) - 7);
-								char *ipPacket = CreateIPPacket(7 + strlen(ipPayload),
+								strncpy(ipPayload, &payload[7], MAX_IP_PACKET_SIZE - 7);
+								char *ipPacket = CreateIPPacket(7 + IP_PAYLOAD_SIZE,
 																6,
 																TR_PROTOCOL,
 																payload[3],
@@ -2467,7 +2585,7 @@ void ActAsHost(HostInfo *hostInfo)
 									char *packetToSend = CreateEthernetPacket(255,
 																			  hostInfo->MAC,
 																			  (unsigned char)1,
-																			  4 + strlen(message),
+																			  4 + ETHERNET_PAYLOAD_SIZE,
 																			  message);
 
 									int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -2495,7 +2613,7 @@ void ActAsHost(HostInfo *hostInfo)
 									char *packetToSend = CreateEthernetPacket(hostInfo->arpCacheMAC[targetArpIndex],
 																		  sourceMAC,
 																		  (unsigned char)PING_PROTOCOL,
-																		  4 + strlen(ipPacket),
+																		  4 + MAX_IP_PACKET_SIZE,
 																		  ipPacket);
 
 									int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -2509,7 +2627,7 @@ void ActAsHost(HostInfo *hostInfo)
 							}
 						}
 					}
-					else if(buffer[2] == TR_PROTOCOL)
+					else if(buffer[2] == TCP_TEST_PROTOCOL)
 					{
 						int forMe = 0;
 
@@ -2522,7 +2640,7 @@ void ActAsHost(HostInfo *hostInfo)
 						if(forMe)
 						{
 							int portNumber;
-							memcpy((void *)&tcpPacket[0], (void *)&portNumber, sizeof(int));
+							memcpy((void *)&portNumber, (void *)&tcpPacket[0], sizeof(int));
 							char *tcpPayload = GetTCPPayload(tcpPacket);
 							printf("%s received tcptest from %d.%d for port %d: %s", hostInfo->name, ipPacket[3], ipPacket[4], portNumber, tcpPayload);
 
@@ -2551,7 +2669,7 @@ void ActAsHost(HostInfo *hostInfo)
 								unsigned char sourceMAC = hostInfo->routeTableSourceMAC[targetRouteIndex];
 								int sendInterface = hostInfo->interface;
 
-								char *newIPPacket = CreateIPPacket(7 + strlen(tcpPacket),
+								char *newIPPacket = CreateIPPacket(7 + MAX_TCP_PACKET_SIZE,
 																6,
 																TCP_TEST_PROTOCOL,
 																ipPacket[3],
@@ -2590,7 +2708,7 @@ void ActAsHost(HostInfo *hostInfo)
 									char *packetToSend = CreateEthernetPacket(255,
 																			  hostInfo->MAC,
 																			  (unsigned char)1,
-																			  4 + strlen(message),
+																			  4 + ETHERNET_PAYLOAD_SIZE,
 																			  message);
 
 									int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -2601,7 +2719,7 @@ void ActAsHost(HostInfo *hostInfo)
 									arpWaitNet = targetGateNet;
 									arpWaitHost = targetGateHost;
 									arpWaitHavePacket = 1;
-									arpWaitIPPacket = ipPacket;
+									arpWaitIPPacket = newIPPacket;
 									arpWaitSourceMAC = sourceMAC;
 									arpWaitProtocol = (unsigned char)TCP_TEST_PROTOCOL;
 									arpWaitFinalNet = targetNetIP;
@@ -2618,7 +2736,7 @@ void ActAsHost(HostInfo *hostInfo)
 									char *packetToSend = CreateEthernetPacket(hostInfo->arpCacheMAC[targetARPIndex],
 																			  sourceMAC,
 																			  (unsigned char)TCP_TEST_PROTOCOL,
-																			  4 + strlen(ipPacket),
+																			  4 + MAX_IP_PACKET_SIZE,
 																			  ipPacket);
 
 									int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -2670,7 +2788,7 @@ void ActAsHost(HostInfo *hostInfo)
 				char *packetToSend = CreateEthernetPacket(receiver[0],
 														  sender[0],
 														  (unsigned char)0,
-														  4 + strlen(message),
+														  4 + ETHERNET_PAYLOAD_SIZE,
 														  message);
 
 				if(receiver[0] != 255)
@@ -2711,7 +2829,7 @@ void ActAsHost(HostInfo *hostInfo)
 				char *packetToSend = CreateEthernetPacket(255,
 														  hostInfo->MAC,
 														  (unsigned char)1,
-														  4 + strlen(message),
+														  4 + ETHERNET_PAYLOAD_SIZE,
 														  message);
 
 				// printf("%s: arpreq on %d: %d.%d\n", hostInfo->name, hostInfo->MAC, netIP[0], hostIP[0]);
@@ -2798,7 +2916,7 @@ void ActAsHost(HostInfo *hostInfo)
 					int sendInterface = hostInfo->interface;
 
 					char *ipPayload = "";
-					char *ipPacket = CreateIPPacket(7 + strlen(ipPayload),
+					char *ipPacket = CreateIPPacket(7 + IP_PAYLOAD_SIZE,
 													6,
 													PING_PROTOCOL,
 													hostInfo->netIP,
@@ -2837,7 +2955,7 @@ void ActAsHost(HostInfo *hostInfo)
 						char *packetToSend = CreateEthernetPacket(255,
 																  hostInfo->MAC,
 																  (unsigned char)1,
-																  4 + strlen(message),
+																  4 + ETHERNET_PAYLOAD_SIZE,
 																  message);
 
 						int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -2865,7 +2983,7 @@ void ActAsHost(HostInfo *hostInfo)
 						char *packetToSend = CreateEthernetPacket(hostInfo->arpCacheMAC[targetArpIndex],
 																  sourceMAC,
 																  (unsigned char)PING_PROTOCOL,
-																  4 + strlen(ipPacket),
+																  4 + MAX_IP_PACKET_SIZE,
 																  ipPacket);
 
 						int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -2910,7 +3028,7 @@ void ActAsHost(HostInfo *hostInfo)
 					int sendInterface = hostInfo->interface;
 
 					char *ipPayload = "";
-					char *ipPacket = CreateIPPacket(7 + strlen(ipPayload),
+					char *ipPacket = CreateIPPacket(7 + IP_PAYLOAD_SIZE,
 													6,
 													TR_PROTOCOL,
 													hostInfo->netIP,
@@ -2949,7 +3067,7 @@ void ActAsHost(HostInfo *hostInfo)
 						char *packetToSend = CreateEthernetPacket(255,
 																  hostInfo->MAC,
 																  (unsigned char)1,
-																  4 + strlen(message),
+																  4 + ETHERNET_PAYLOAD_SIZE,
 																  message);
 
 						int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -2977,7 +3095,7 @@ void ActAsHost(HostInfo *hostInfo)
 						char *packetToSend = CreateEthernetPacket(hostInfo->arpCacheMAC[targetArpIndex],
 																  sourceMAC,
 																  (unsigned char)PING_PROTOCOL,
-																  4 + strlen(ipPacket),
+																  4 + MAX_IP_PACKET_SIZE,
 																  ipPacket);
 
 						int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -3037,7 +3155,7 @@ void ActAsHost(HostInfo *hostInfo)
 					unsigned char sourceMAC = hostInfo->routeTableSourceMAC[targetRouteIndex];
 					int sendInterface = hostInfo->interface;
 
-					char *ipPacket = CreateIPPacket(7 + strlen(tcpPacket),
+					char *ipPacket = CreateIPPacket(7 + MAX_TCP_PACKET_SIZE,
 													6,
 													TCP_TEST_PROTOCOL,
 													hostInfo->netIP,
@@ -3076,7 +3194,7 @@ void ActAsHost(HostInfo *hostInfo)
 						char *packetToSend = CreateEthernetPacket(255,
 																  hostInfo->MAC,
 																  (unsigned char)1,
-																  4 + strlen(message),
+																  4 + ETHERNET_PAYLOAD_SIZE,
 																  message);
 
 						int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -3104,7 +3222,7 @@ void ActAsHost(HostInfo *hostInfo)
 						char *packetToSend = CreateEthernetPacket(hostInfo->arpCacheMAC[targetARPIndex],
 																  sourceMAC,
 																  (unsigned char)TCP_TEST_PROTOCOL,
-																  4 + strlen(ipPacket),
+																  4 + MAX_IP_PACKET_SIZE,
 																  ipPacket);
 
 						int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
@@ -3131,7 +3249,7 @@ unsigned char *CreateEthernetPacket(unsigned char destMAC, unsigned char srcMAC,
 	returnPacket[2] = type;
 	returnPacket[3] = length;
 
-	strncpy(&returnPacket[4], payload, strlen(payload));
+	memcpy((void *)&returnPacket[4], (void *)payload, ETHERNET_PAYLOAD_SIZE);
 
 	return returnPacket;
 }
@@ -3155,7 +3273,7 @@ char *GetPayload(char *packet)
 {
 	char *payload = calloc(ETHERNET_PAYLOAD_SIZE, sizeof(char));
 
-	strncpy(payload, packet + 4, 100);
+	memcpy(payload, packet + 4, 100);
 
 	return payload;
 }
@@ -3164,7 +3282,7 @@ char *GetIPPayload(char *packet)
 {
 	char *payload = calloc(IP_PAYLOAD_SIZE, sizeof(char));
 
-	strncpy(payload, packet + 7, IP_PAYLOAD_SIZE - 7);
+	memcpy(payload, packet + 7, IP_PAYLOAD_SIZE - 7);
 
 	return payload;
 }
@@ -3173,7 +3291,7 @@ char *GetTCPPayload(char *packet)
 {
 	char *payload = calloc(TCP_PAYLOAD_SIZE, sizeof(char));
 
-	strncpy(payload, packet + 4, TCP_PAYLOAD_SIZE - 4);
+	memcpy(payload, packet + 4, TCP_PAYLOAD_SIZE - 4);
 
 	return payload;
 }
@@ -3191,7 +3309,7 @@ unsigned char *CreateIPPacket(unsigned char length, unsigned char ttl, unsigned 
 	returnPacket[5] = destNet;
 	returnPacket[6] = destHost;
 
-	strncpy(&returnPacket[7], payload, strlen(payload));
+	memcpy((void *)&returnPacket[7], (void *)payload, IP_PAYLOAD_SIZE);
 
 	return returnPacket;
 }
