@@ -1,3 +1,5 @@
+// TODO: add receives for tcp_conn/send/done_flag
+// TODO: what to do for conn
 // SOCKPAIR SIDES
 // 0 interpreter-switch 1
 // 0 interpreter-host/router 1
@@ -28,6 +30,8 @@
 #define IP_PAYLOAD_SIZE 93
 #define MAX_TCP_PACKET_SIZE 93
 #define TCP_PAYLOAD_SIZE 89
+#define MAX_ACTIVE_PORTS 4
+#define MAX_TCP_MESSAGES 8
 
 #define FINISHED_FLAG 1
 #define MACSEND_FLAG 2
@@ -37,6 +41,9 @@
 #define PING_FLAG 6
 #define TR_FLAG 7
 #define TCP_TEST_FLAG 8
+#define TCP_CONN_FLAG 9
+#define TCP_SEND_FLAG 10
+#define TCP_DONE_FLAG 11
 
 #define MACSEND_PROTOCOL 0
 #define ARPREQ_PROTOCOL 1
@@ -44,6 +51,9 @@
 #define PING_PROTOCOL 3
 #define TR_PROTOCOL 4
 #define TCP_TEST_PROTOCOL 5
+#define TCP_CONN_PROTOCOL 6
+#define TCP_SEND_PROTOCOL 7
+#define TCP_DONE_PROTOCOL 8
 
 #define DEF_ROUTE 255
 
@@ -1027,6 +1037,187 @@ int main(int argc, char *argv[])
 
 			write(deviceInterface, (void *)&payload, strlen(operations[operationsIndex][4]));
 		}
+		else if(strcmp(operations[operationsIndex][0], "ftpd_conn") == 0)
+		{
+			// get the target host or router's name
+			char targetName[NAME_LENGTH];
+			strcpy(&targetName[0], operations[operationsIndex][1]);
+
+			// find which host or router it is
+			int deviceInterface = 0;
+
+			for(int deviceIndex = 0; deviceIndex < numRouters; deviceIndex++)
+			{
+				if(strcmp(routers[deviceIndex].name, targetName) == 0)
+				{
+					deviceInterface = routerControlFDs[deviceIndex];
+					break;
+				}
+			}
+
+			if(!deviceInterface)
+			{
+				for(int deviceIndex = 0; deviceIndex < numHosts; deviceIndex++)
+				{
+					if(strcmp(hosts[deviceIndex].name, targetName) == 0)
+					{
+						deviceInterface = hostControlFDs[deviceIndex];
+						break;
+					}
+				}
+			}
+
+			// tell the target to do a ftpd_conn
+			unsigned char charBuffer[1];
+			charBuffer[0] = TCP_CONN_FLAG;
+			write(deviceInterface, (void *)&charBuffer, 1);
+
+			// wait for it to say it's ready
+			read(deviceInterface, (void *)&charBuffer, 1);
+
+			// tell the target who to look for
+			int toHostIndex;
+
+			for(toHostIndex = 0; toHostIndex < numHosts; toHostIndex++)
+			{
+				if(strcmp(hosts[toHostIndex].name, operations[operationsIndex][2]) == 0)
+					break;
+			}
+
+			charBuffer[0] = hosts[toHostIndex].netIP;
+			write(deviceInterface, (void *)&charBuffer, 1);
+
+			charBuffer[0] = hosts[toHostIndex].hostIP;
+			write(deviceInterface, (void *)&charBuffer, 1);
+
+			// tell the target what port use
+			int port = atoi(operations[operationsIndex][3]);
+			
+			write(deviceInterface, (void *)&port, sizeof(int));
+		}
+		else if(strcmp(operations[operationsIndex][0], "ftp_send") == 0)
+		{
+			// get the target host or router's name
+			char targetName[NAME_LENGTH];
+			strcpy(&targetName[0], operations[operationsIndex][1]);
+
+			// find which host or router it is
+			int deviceInterface = 0;
+
+			for(int deviceIndex = 0; deviceIndex < numRouters; deviceIndex++)
+			{
+				if(strcmp(routers[deviceIndex].name, targetName) == 0)
+				{
+					deviceInterface = routerControlFDs[deviceIndex];
+					break;
+				}
+			}
+
+			if(!deviceInterface)
+			{
+				for(int deviceIndex = 0; deviceIndex < numHosts; deviceIndex++)
+				{
+					if(strcmp(hosts[deviceIndex].name, targetName) == 0)
+					{
+						deviceInterface = hostControlFDs[deviceIndex];
+						break;
+					}
+				}
+			}
+
+			// tell the target to do a ftp_send
+			unsigned char charBuffer[1];
+			charBuffer[0] = TCP_SEND_FLAG;
+			write(deviceInterface, (void *)&charBuffer, 1);
+
+			// wait for it to say it's ready
+			read(deviceInterface, (void *)&charBuffer, 1);
+
+			// tell the target who to look for
+			int toHostIndex;
+
+			for(toHostIndex = 0; toHostIndex < numHosts; toHostIndex++)
+			{
+				if(strcmp(hosts[toHostIndex].name, operations[operationsIndex][2]) == 0)
+					break;
+			}
+
+			charBuffer[0] = hosts[toHostIndex].netIP;
+			write(deviceInterface, (void *)&charBuffer, 1);
+
+			charBuffer[0] = hosts[toHostIndex].hostIP;
+			write(deviceInterface, (void *)&charBuffer, 1);
+
+			// tell the target what port use
+			int port = atoi(operations[operationsIndex][3]);
+			
+			write(deviceInterface, (void *)&port, sizeof(int));
+
+			// tell the target the payload
+			unsigned char payload[100];
+
+			memcpy((void *)&payload, (void *)operations[operationsIndex][4], strlen(operations[operationsIndex][4]));
+
+			write(deviceInterface, (void *)&payload, strlen(operations[operationsIndex][4]));
+		}
+		else if(strcmp(operations[operationsIndex][0], "ftp_done") == 0)
+		{
+			// get the target host or router's name
+			char targetName[NAME_LENGTH];
+			strcpy(&targetName[0], operations[operationsIndex][1]);
+
+			// find which host or router it is
+			int deviceInterface = 0;
+
+			for(int deviceIndex = 0; deviceIndex < numRouters; deviceIndex++)
+			{
+				if(strcmp(routers[deviceIndex].name, targetName) == 0)
+				{
+					deviceInterface = routerControlFDs[deviceIndex];
+					break;
+				}
+			}
+
+			if(!deviceInterface)
+			{
+				for(int deviceIndex = 0; deviceIndex < numHosts; deviceIndex++)
+				{
+					if(strcmp(hosts[deviceIndex].name, targetName) == 0)
+					{
+						deviceInterface = hostControlFDs[deviceIndex];
+						break;
+					}
+				}
+			}
+
+			// tell the target to do a ftp_done
+			unsigned char charBuffer[1];
+			charBuffer[0] = TCP_DONE_FLAG;
+			write(deviceInterface, (void *)&charBuffer, 1);
+
+			// wait for it to say it's ready
+			read(deviceInterface, (void *)&charBuffer, 1);
+
+			// tell the target who to look for
+			int toHostIndex;
+
+			for(toHostIndex = 0; toHostIndex < numHosts; toHostIndex++)
+			{
+				if(strcmp(hosts[toHostIndex].name, operations[operationsIndex][2]) == 0)
+					break;
+			}
+
+			charBuffer[0] = hosts[toHostIndex].netIP;
+			write(deviceInterface, (void *)&charBuffer, 1);
+
+			charBuffer[0] = hosts[toHostIndex].hostIP;
+			write(deviceInterface, (void *)&charBuffer, 1);
+
+			// tell the target what port use
+			int port = atoi(operations[operationsIndex][3]);
+			
+			write(deviceInterface, (void *)&port, sizeof(int));
+		}
 
 		operationsIndex++;
 	}
@@ -1681,7 +1872,7 @@ void ActAsRouter(RouterInfo *routerInfo)
 						}
 					}
 				}
-				else if(buffer[2] == TCP_TEST_PROTOCOL)
+				else if(buffer[2] == TCP_TEST_PROTOCOL || buffer[2] == TCP_CONN_PROTOCOL || buffer[2] == TCP_SEND_PROTOCOL || buffer[2] == TCP_DONE_PROTOCOL)
 				{
 					char *ipPacket = payload;
 					char *tcpPacket = GetIPPayload(ipPacket);
@@ -2250,6 +2441,10 @@ void ActAsHost(HostInfo *hostInfo)
 	int arpShouldPrint;
 	unsigned char *arpWaitIPPacket;
 
+	// tcp data
+	int activePorts[MAX_ACTIVE_PORTS] = { 0 };
+	char tcpMessages[MAX_ACTIVE_PORTS][MAX_TCP_MESSAGES][TCP_PAYLOAD_SIZE];
+	int tcpNumMessages = 0;
 
 	while(!done)
 	{
@@ -2643,6 +2838,392 @@ void ActAsHost(HostInfo *hostInfo)
 							memcpy((void *)&portNumber, (void *)&tcpPacket[0], sizeof(int));
 							char *tcpPayload = GetTCPPayload(tcpPacket);
 							printf("%s received tcptest from %d.%d for port %d: %s", hostInfo->name, ipPacket[3], ipPacket[4], portNumber, tcpPayload);
+
+							free(tcpPayload);
+							free(tcpPacket);
+						}
+						else
+						{
+							unsigned char targetNetIP = ipPacket[5];
+							unsigned char targetHostIP = ipPacket[6];
+
+							int targetRouteIndex = -1;
+
+							for(int i = 0; i < hostInfo->routeTableCount; i++)
+							{
+								if(hostInfo->routeTableDestNet[i] == targetNetIP || hostInfo->routeTableDestNet[i] == DEF_ROUTE)
+								{
+									targetRouteIndex = i;
+									break;
+								}
+							}
+
+							if(targetRouteIndex != -1)
+							{
+								// find the right mac
+								unsigned char sourceMAC = hostInfo->routeTableSourceMAC[targetRouteIndex];
+								int sendInterface = hostInfo->interface;
+
+								char *newIPPacket = CreateIPPacket(7 + MAX_TCP_PACKET_SIZE,
+																6,
+																TCP_TEST_PROTOCOL,
+																ipPacket[3],
+																ipPacket[4],
+																targetNetIP,
+																targetHostIP,
+																tcpPacket);
+
+								unsigned char targetGateNet = hostInfo->routeTableGateNet[targetRouteIndex];
+								unsigned char targetGateHost = hostInfo->routeTableGateHost[targetRouteIndex];
+
+								if(targetGateNet == 255)
+								{
+									targetGateNet = targetNetIP;
+									targetGateHost = targetHostIP;
+								}
+
+								int targetARPIndex = -1;
+
+								for(int i = 0; i < hostInfo->arpCacheCount; i++)
+								{
+									if(hostInfo->arpCacheNet[i] == targetGateNet && hostInfo->arpCacheHost[i] == targetGateHost)
+									{
+										targetARPIndex = i;
+										break;
+									}
+								}
+
+								if(targetARPIndex == -1)
+								{
+									// broadcast the request
+									unsigned char message[ETHERNET_PAYLOAD_SIZE];
+									message[0] = targetGateNet;
+									message[1] = targetGateHost;
+
+									char *packetToSend = CreateEthernetPacket(255,
+																			  hostInfo->MAC,
+																			  (unsigned char)1,
+																			  4 + ETHERNET_PAYLOAD_SIZE,
+																			  message);
+
+									int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
+
+									while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
+										bytesWritten += write(sendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+									arpWaitNet = targetGateNet;
+									arpWaitHost = targetGateHost;
+									arpWaitHavePacket = 1;
+									arpWaitIPPacket = newIPPacket;
+									arpWaitSourceMAC = sourceMAC;
+									arpWaitProtocol = (unsigned char)TCP_TEST_PROTOCOL;
+									arpWaitFinalNet = targetNetIP;
+									arpWaitFinalHost = targetHostIP;
+									arpWaitSendInterface = sendInterface;
+									arpShouldPrint = 0;
+									expectingARPReply = 1;
+									gettimeofday(&arpStartTime, NULL);
+
+									free(packetToSend);
+								}
+								else
+								{
+									char *packetToSend = CreateEthernetPacket(hostInfo->arpCacheMAC[targetARPIndex],
+																			  sourceMAC,
+																			  (unsigned char)TCP_TEST_PROTOCOL,
+																			  4 + MAX_IP_PACKET_SIZE,
+																			  ipPacket);
+
+									int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
+
+									while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
+										bytesWritten += write(sendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+									free(packetToSend);
+									free(ipPacket);
+								}
+							}
+						}
+					}
+					else if(buffer[2] == TCP_CONN_PROTOCOL)
+					{
+						int forMe = 0;
+
+						char *ipPacket = payload;
+						char *tcpPacket = GetIPPayload(ipPacket);
+
+						if(ipPacket[5] == hostInfo->netIP && payload[6] == hostInfo->hostIP)
+							forMe = 1;
+
+						if(forMe)
+						{
+							int portNumber;
+							memcpy((void *)&portNumber, (void *)&tcpPacket[0], sizeof(int));
+							char *tcpPayload = GetTCPPayload(tcpPacket);
+
+							int portIndex = 0;
+
+							while(portIndex < 4)
+							{
+								if(activePorts[portIndex] == 0)
+								{
+									activePorts[portIndex] = portNumber;
+									break;
+								}
+
+								portIndex++;
+							}
+
+							free(tcpPayload);
+							free(tcpPacket);
+						}
+						else
+						{
+							unsigned char targetNetIP = ipPacket[5];
+							unsigned char targetHostIP = ipPacket[6];
+
+							int targetRouteIndex = -1;
+
+							for(int i = 0; i < hostInfo->routeTableCount; i++)
+							{
+								if(hostInfo->routeTableDestNet[i] == targetNetIP || hostInfo->routeTableDestNet[i] == DEF_ROUTE)
+								{
+									targetRouteIndex = i;
+									break;
+								}
+							}
+
+							if(targetRouteIndex != -1)
+							{
+								// find the right mac
+								unsigned char sourceMAC = hostInfo->routeTableSourceMAC[targetRouteIndex];
+								int sendInterface = hostInfo->interface;
+
+								char *newIPPacket = CreateIPPacket(7 + MAX_TCP_PACKET_SIZE,
+																6,
+																TCP_TEST_PROTOCOL,
+																ipPacket[3],
+																ipPacket[4],
+																targetNetIP,
+																targetHostIP,
+																tcpPacket);
+
+								unsigned char targetGateNet = hostInfo->routeTableGateNet[targetRouteIndex];
+								unsigned char targetGateHost = hostInfo->routeTableGateHost[targetRouteIndex];
+
+								if(targetGateNet == 255)
+								{
+									targetGateNet = targetNetIP;
+									targetGateHost = targetHostIP;
+								}
+
+								int targetARPIndex = -1;
+
+								for(int i = 0; i < hostInfo->arpCacheCount; i++)
+								{
+									if(hostInfo->arpCacheNet[i] == targetGateNet && hostInfo->arpCacheHost[i] == targetGateHost)
+									{
+										targetARPIndex = i;
+										break;
+									}
+								}
+
+								if(targetARPIndex == -1)
+								{
+									// broadcast the request
+									unsigned char message[ETHERNET_PAYLOAD_SIZE];
+									message[0] = targetGateNet;
+									message[1] = targetGateHost;
+
+									char *packetToSend = CreateEthernetPacket(255,
+																			  hostInfo->MAC,
+																			  (unsigned char)1,
+																			  4 + ETHERNET_PAYLOAD_SIZE,
+																			  message);
+
+									int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
+
+									while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
+										bytesWritten += write(sendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+									arpWaitNet = targetGateNet;
+									arpWaitHost = targetGateHost;
+									arpWaitHavePacket = 1;
+									arpWaitIPPacket = newIPPacket;
+									arpWaitSourceMAC = sourceMAC;
+									arpWaitProtocol = (unsigned char)TCP_TEST_PROTOCOL;
+									arpWaitFinalNet = targetNetIP;
+									arpWaitFinalHost = targetHostIP;
+									arpWaitSendInterface = sendInterface;
+									arpShouldPrint = 0;
+									expectingARPReply = 1;
+									gettimeofday(&arpStartTime, NULL);
+
+									free(packetToSend);
+								}
+								else
+								{
+									char *packetToSend = CreateEthernetPacket(hostInfo->arpCacheMAC[targetARPIndex],
+																			  sourceMAC,
+																			  (unsigned char)TCP_TEST_PROTOCOL,
+																			  4 + MAX_IP_PACKET_SIZE,
+																			  ipPacket);
+
+									int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
+
+									while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
+										bytesWritten += write(sendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+									free(packetToSend);
+									free(ipPacket);
+								}
+							}
+						}
+					}
+					else if(buffer[2] == TCP_SEND_PROTOCOL)
+					{
+						int forMe = 0;
+
+						char *ipPacket = payload;
+						char *tcpPacket = GetIPPayload(ipPacket);
+
+						if(ipPacket[5] == hostInfo->netIP && payload[6] == hostInfo->hostIP)
+							forMe = 1;
+
+						if(forMe)
+						{
+							int portNumber;
+							memcpy((void *)&portNumber, (void *)&tcpPacket[0], sizeof(int));
+							char *tcpPayload = GetTCPPayload(tcpPacket);
+
+							// TODO: what to do for send
+							// check if the port is actually available
+
+								// store the message
+
+							free(tcpPayload);
+							free(tcpPacket);
+						}
+						else
+						{
+							unsigned char targetNetIP = ipPacket[5];
+							unsigned char targetHostIP = ipPacket[6];
+
+							int targetRouteIndex = -1;
+
+							for(int i = 0; i < hostInfo->routeTableCount; i++)
+							{
+								if(hostInfo->routeTableDestNet[i] == targetNetIP || hostInfo->routeTableDestNet[i] == DEF_ROUTE)
+								{
+									targetRouteIndex = i;
+									break;
+								}
+							}
+
+							if(targetRouteIndex != -1)
+							{
+								// find the right mac
+								unsigned char sourceMAC = hostInfo->routeTableSourceMAC[targetRouteIndex];
+								int sendInterface = hostInfo->interface;
+
+								char *newIPPacket = CreateIPPacket(7 + MAX_TCP_PACKET_SIZE,
+																6,
+																TCP_TEST_PROTOCOL,
+																ipPacket[3],
+																ipPacket[4],
+																targetNetIP,
+																targetHostIP,
+																tcpPacket);
+
+								unsigned char targetGateNet = hostInfo->routeTableGateNet[targetRouteIndex];
+								unsigned char targetGateHost = hostInfo->routeTableGateHost[targetRouteIndex];
+
+								if(targetGateNet == 255)
+								{
+									targetGateNet = targetNetIP;
+									targetGateHost = targetHostIP;
+								}
+
+								int targetARPIndex = -1;
+
+								for(int i = 0; i < hostInfo->arpCacheCount; i++)
+								{
+									if(hostInfo->arpCacheNet[i] == targetGateNet && hostInfo->arpCacheHost[i] == targetGateHost)
+									{
+										targetARPIndex = i;
+										break;
+									}
+								}
+
+								if(targetARPIndex == -1)
+								{
+									// broadcast the request
+									unsigned char message[ETHERNET_PAYLOAD_SIZE];
+									message[0] = targetGateNet;
+									message[1] = targetGateHost;
+
+									char *packetToSend = CreateEthernetPacket(255,
+																			  hostInfo->MAC,
+																			  (unsigned char)1,
+																			  4 + ETHERNET_PAYLOAD_SIZE,
+																			  message);
+
+									int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
+
+									while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
+										bytesWritten += write(sendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+									arpWaitNet = targetGateNet;
+									arpWaitHost = targetGateHost;
+									arpWaitHavePacket = 1;
+									arpWaitIPPacket = newIPPacket;
+									arpWaitSourceMAC = sourceMAC;
+									arpWaitProtocol = (unsigned char)TCP_TEST_PROTOCOL;
+									arpWaitFinalNet = targetNetIP;
+									arpWaitFinalHost = targetHostIP;
+									arpWaitSendInterface = sendInterface;
+									arpShouldPrint = 0;
+									expectingARPReply = 1;
+									gettimeofday(&arpStartTime, NULL);
+
+									free(packetToSend);
+								}
+								else
+								{
+									char *packetToSend = CreateEthernetPacket(hostInfo->arpCacheMAC[targetARPIndex],
+																			  sourceMAC,
+																			  (unsigned char)TCP_TEST_PROTOCOL,
+																			  4 + MAX_IP_PACKET_SIZE,
+																			  ipPacket);
+
+									int bytesWritten = write(sendInterface, (void *)packetToSend, MAX_ETHERNET_PACKET_SIZE);
+
+									while(bytesWritten < MAX_ETHERNET_PACKET_SIZE)
+										bytesWritten += write(sendInterface, (void *)packetToSend + bytesWritten, MAX_ETHERNET_PACKET_SIZE - bytesWritten);
+
+									free(packetToSend);
+									free(ipPacket);
+								}
+							}
+						}
+					}
+					else if(buffer[2] == TCP_DONE_PROTOCOL)
+					{
+						int forMe = 0;
+
+						char *ipPacket = payload;
+						char *tcpPacket = GetIPPayload(ipPacket);
+
+						if(ipPacket[5] == hostInfo->netIP && payload[6] == hostInfo->hostIP)
+							forMe = 1;
+
+						if(forMe)
+						{
+							int portNumber;
+							memcpy((void *)&portNumber, (void *)&tcpPacket[0], sizeof(int));
+							char *tcpPayload = GetTCPPayload(tcpPacket);
+
+							// TODO: what to do for done
 
 							free(tcpPayload);
 							free(tcpPacket);
