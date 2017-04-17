@@ -2836,7 +2836,7 @@ void ActAsHost(HostInfo *hostInfo)
 							int portNumber;
 							memcpy((void *)&portNumber, (void *)&tcpPacket[0], sizeof(int));
 							char *tcpPayload = GetTCPPayload(tcpPacket);
-							printf("%s received tcptest from %d.%d for port %d: %s", hostInfo->name, ipPacket[3], ipPacket[4], portNumber, tcpPayload);
+							printf("%s received tcptest from %d.%d for port %d: %s\n", hostInfo->name, ipPacket[3], ipPacket[4], portNumber, tcpPayload);
 
 							free(tcpPayload);
 							free(tcpPacket);
@@ -3108,7 +3108,7 @@ void ActAsHost(HostInfo *hostInfo)
 
 							if(portIndex >= 4)
 							{
-								printf("%s received FTPSend on unused port %d", hostInfo->name, portNumber);
+								printf("%s received FTPSend on unused port %d\n", hostInfo->name, portNumber);
 							}
 							else
 							{
