@@ -12,7 +12,7 @@ typedef struct
 {
 	int id;
 	int node;
-	double computation;
+	double computationalComplexity;
 	int numDependencies;
 	int *dependentNodes;
 	double *dataToProvide;
@@ -20,9 +20,21 @@ typedef struct
 	double *providedData;
 } ModuleInfo;
 
+typedef struct
+{
+	int id;
+	double processingPower;
+	int numAdjacencies;
+	int *adjacentNodes;
+	double *linkBandwidth;
+	double *linkDelay;
+} NodeInfo;
+
 // variables found in the user provided files
 int numModules;
 ModuleInfo *moduleInfo;
+int numNodes;
+NodeInfo *nodeInfo;
 
 // beyond the info found in the user provided files we need:
 	// array of links with the number of files traveling over each link currently
@@ -99,15 +111,11 @@ int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile)
 		fgets(lineBuffer, 32, taskGraphFile);
 		strtok(lineBuffer, " ");
 		tokenBuffer = strtok(NULL, "\n");
-		moduleInfo[moduleIndex].computation = strtod(tokenBuffer, NULL);
+		moduleInfo[moduleIndex].computationalComplexity = strtod(tokenBuffer, NULL);
 	}
 
 	// number of dependencies... which modules a node is dependent upon and how much data it needs from the other module (task graph)
 	fgets(lineBuffer, 32, taskGraphFile);
-	strtok(lineBuffer, " ");
-	strtok(NULL, " ");
-	tokenBuffer = strtok(NULL, "\n");
-	int numDependencies = atoi(tokenBuffer);
 
 	int provider;
 	int dependent;
@@ -178,7 +186,46 @@ int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile)
 	tokenBuffer = strtok(NULL, "\n");
 	int numNodes = atoi(tokenBuffer);
 
-	// relevant link bandwidths/static delays... look at dependencies/module to node mappings to decide which links we care about (network graph)
+	nodeInfo = malloc(sizeof(NodeInfo) * numNodes);			// TODO: free
+
+	for(int nodeIndex = 0; nodeIndex < numNodes; nodeIndex++)
+	{
+		fgets(lineBuffer, 32, networkGraphFile);
+		tokenBuffer = strtok(lineBuffer, " ");
+		nodeInfo[nodeIndex].id = atoi(tokenBuffer);
+		tokenBuffer = strtok(NULL, "\n");
+		nodeInfo[nodeIndex].processingPower = strtod(tokenBuffer, NULL);
+	}
+
+	// link bandwidths/delays
+	fgets(lineBuffer, 32, networkGraphFile);
+
+	int adjacencyIndex;
+	int node1;
+	int node2;
+	int nodeAdjacencyCount[numNodes];
+	double adjacencyBandwidth[numNodes][numNodes];
+	double adjacencyDelay[numNodes][numNodes];
+
+	for(int i = 0; i < numNodes; i++)
+	{
+		nodeAdjacencyCount[i] = 0;
+	}
+
+	for(int i = 0; i < numNodes * numNodes; i++)
+	{
+		fgets(lineBuffer, 32, networkGraphFile);
+		tokenBuffer = strtok(lineBuffer, " ");
+		adjacencyIndex = atoi(tokenBuffer);
+		node1 = adjacencyIndex / numNodes;
+		node2 = adjacencyIndex % numNodes;
+		tokenBuffer = strtok(NULL, " ");
+		adjacencyBandwidth[node1][node2] = strtod(tokenBuffer, NULL);
+		tokenBuffer = strtok(NULL, "\n");
+		adjacencyDelay[node1][node2] = strtod(tokenBuffer, NULL);
+	}
+
+	// store only relevant adjacencies... FIGURE IT OUT
 
 	return 0;
 }
