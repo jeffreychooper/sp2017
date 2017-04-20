@@ -13,21 +13,26 @@ typedef struct
 	int id;
 	int node;
 	double computationalComplexity;
-	int numDependencies;
-	int *dependentNodes;
+
+	int numDependents;
+	int *dependentModules;
 	double *dataToProvide;
-	int *providerNodes;
+	int *dependentNodes;
+	double *dependentBandwidths;
+	double *dependentDelays;
+
+	int numProviders;
+	int *providerModules;
 	double *providedData;
+	int *providerNodes;
+	double *providerBandwidths;
+	double *providerDelays;
 } ModuleInfo;
 
 typedef struct
 {
 	int id;
 	double processingPower;
-	int numAdjacencies;
-	int *adjacentNodes;
-	double *linkBandwidth;
-	double *linkDelay;
 } NodeInfo;
 
 // variables found in the user provided files
@@ -150,10 +155,19 @@ int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile)
 	for(int moduleIndex = 0; moduleIndex < numModules; moduleIndex++)
 	{
 		// TODO: free all of this shit (FOR ALL MODULES YOU DUMBASS)
-		moduleInfo[moduleIndex].dependentNodes = malloc(sizeof(int) * nodeDependentCount[moduleIndex]);
+		moduleInfo[moduleIndex].numDependents = nodeDependentCount[moduleIndex];
+		moduleInfo[moduleIndex].dependentModules = malloc(sizeof(int) * nodeDependentCount[moduleIndex]);
 		moduleInfo[moduleIndex].dataToProvide = malloc(sizeof(double) * nodeDependentCount[moduleIndex]);
-		moduleInfo[moduleIndex].providerNodes = malloc(sizeof(int) * nodeProviderCount[moduleIndex]);
+		moduleInfo[moduleIndex].dependentNodes = malloc(sizeof(int) * nodeDependentCount[moduleIndex]);
+		moduleInfo[moduleIndex].dependentBandwidths = malloc(sizeof(double) * nodeDependentCount[moduleIndex]);
+		moduleInfo[moduleIndex].dependentDelays = malloc(sizeof(double) * nodeDependentCount[moduleIndex]);
+		
+		moduleInfo[moduleIndex].numProviders = nodeProviderCount[moduleIndex];
+		moduleInfo[moduleIndex].providerModules = malloc(sizeof(int) * nodeProviderCount[moduleIndex]);
 		moduleInfo[moduleIndex].providedData = malloc(sizeof(double) * nodeProviderCount[moduleIndex]);
+		moduleInfo[moduleIndex].providerNodes = malloc(sizeof(int) * nodeProviderCount[moduleIndex]);
+		moduleInfo[moduleIndex].providerBandwidths = malloc(sizeof(double) * nodeProviderCount[moduleIndex]);
+		moduleInfo[moduleIndex].providerDelays = malloc(sizeof(double) * nodeProviderCount[moduleIndex]);
 
 		int dependentIndex = 0;
 
@@ -162,8 +176,9 @@ int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile)
 			while(dependencyArray[moduleIndex][dependentIndex] == 0)
 				dependentIndex++;
 
-			moduleInfo[moduleIndex].dependentNodes[i] = dependentIndex;
+			moduleInfo[moduleIndex].dependentModules[i] = dependentIndex;
 			moduleInfo[moduleIndex].dataToProvide[i] = dependencyArray[moduleIndex][dependentIndex];
+			moduleInfo[moduleIndex].dependentNodes[i] = moduleInfo[dependentIndex].node;
 			dependentIndex++;
 		}
 
@@ -174,8 +189,9 @@ int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile)
 			while(dependencyArray[providerIndex][moduleIndex] == 0)
 				providerIndex++;
 
-			moduleInfo[moduleIndex].providerNodes[i] = providerIndex;
+			moduleInfo[moduleIndex].providerModules[i] = providerIndex;
 			moduleInfo[moduleIndex].providedData[i] = dependencyArray[providerIndex][moduleIndex];
+			moduleInfo[moduleIndex].providerNodes[i] = moduleInfo[providerIndex].node;
 			providerIndex++;
 		}
 	}
@@ -197,20 +213,14 @@ int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile)
 		nodeInfo[nodeIndex].processingPower = strtod(tokenBuffer, NULL);
 	}
 
-	// link bandwidths/delays
+	// link bandwidths/delays (network graph)
 	fgets(lineBuffer, 32, networkGraphFile);
 
 	int adjacencyIndex;
 	int node1;
 	int node2;
-	int nodeAdjacencyCount[numNodes];
 	double adjacencyBandwidth[numNodes][numNodes];
 	double adjacencyDelay[numNodes][numNodes];
-
-	for(int i = 0; i < numNodes; i++)
-	{
-		nodeAdjacencyCount[i] = 0;
-	}
 
 	for(int i = 0; i < numNodes * numNodes; i++)
 	{
@@ -225,7 +235,28 @@ int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile)
 		adjacencyDelay[node1][node2] = strtod(tokenBuffer, NULL);
 	}
 
-	// store only relevant adjacencies... FIGURE IT OUT
+	for(int moduleIndex = 0; moduleIndex < numModules; moduleIndex++)
+	{
+		for(int dependentIndex = 0; dependentIndex < moduleInfo[moduleIndex].numDependents; dependentIndex++)
+		{
+			int moduleNode = moduleInfo[moduleIndex].node;
+			int dependentID = moduleInfo[moduleIndex].dependentModules[dependentIndex];
+			int dependentNode = moduleInfo[dependentID].node;
+
+			moduleInfo[moduleIndex].dependentBandwidths[dependentIndex] = adjacencyBandwidth[moduleNode][dependentNode];
+			moduleInfo[moduleIndex].dependentDelays[dependentIndex] = adjacencyDelay[moduleNode][dependentNode];
+		}
+
+		for(int providerIndex = 0; providerIndex < moduleInfo[moduleIndex].numProviders; providerIndex++)
+		{
+			int moduleNode = moduleInfo[moduleIndex].node;
+			int providerID = moduleInfo[moduleIndex].providerModules[providerIndex];
+			int providerNode = moduleInfo[providerID].node;
+
+			moduleInfo[moduleIndex].providerBandwidths[providerIndex] = adjacencyBandwidth[providerNode][moduleNode];
+			moduleInfo[moduleIndex].providerDelays[providerIndex] = adjacencyDelay[providerNode][moduleNode];
+		}
+	}
 
 	return 0;
 }
