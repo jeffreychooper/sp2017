@@ -109,14 +109,19 @@ int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile)
 	tokenBuffer = strtok(NULL, "\n");
 	int numDependencies = atoi(tokenBuffer);
 
-	int dependenciesFound = 0;
 	int provider;
 	int dependent;
 	int nodeDependentCount[numModules];
 	int nodeProviderCount[numModules];
 	double dependencyArray[numModules][numModules];			// provider, dependent
 
-	while(dependenciesFound < numDependencies)
+	for(int i = 0; i < numModules; i++)
+	{
+		nodeDependentCount[i] = 0;
+		nodeProviderCount[i] = 0;
+	}
+
+	for(int i = 0; i < numModules * numModules; i++)
 	{
 		fgets(lineBuffer, 32, taskGraphFile);
 		tokenBuffer = strtok(lineBuffer, " ");
@@ -129,11 +134,49 @@ int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile)
 		{
 			nodeDependentCount[provider]++;
 			nodeProviderCount[dependent]++;
-			dependenciesFound++;
+		}
+	}
+
+
+	// OH MY GOD WHAT I'M ABOUT TO DO IS INEFFICIENT AS HELL
+	for(int moduleIndex = 0; moduleIndex < numModules; moduleIndex++)
+	{
+		// TODO: free all of this shit (FOR ALL MODULES YOU DUMBASS)
+		moduleInfo[moduleIndex].dependentNodes = malloc(sizeof(int) * nodeDependentCount[moduleIndex]);
+		moduleInfo[moduleIndex].dataToProvide = malloc(sizeof(double) * nodeDependentCount[moduleIndex]);
+		moduleInfo[moduleIndex].providerNodes = malloc(sizeof(int) * nodeProviderCount[moduleIndex]);
+		moduleInfo[moduleIndex].providedData = malloc(sizeof(double) * nodeProviderCount[moduleIndex]);
+
+		int dependentIndex = 0;
+
+		for(int i = 0; i < nodeDependentCount[moduleIndex]; i++)
+		{
+			while(dependencyArray[moduleIndex][dependentIndex] == 0)
+				dependentIndex++;
+
+			moduleInfo[moduleIndex].dependentNodes[i] = dependentIndex;
+			moduleInfo[moduleIndex].dataToProvide[i] = dependencyArray[moduleIndex][dependentIndex];
+			dependentIndex++;
+		}
+
+		int providerIndex = 0;
+
+		for(int i = 0; i < nodeProviderCount[moduleIndex]; i++)
+		{
+			while(dependencyArray[providerIndex][moduleIndex] == 0)
+				providerIndex++;
+
+			moduleInfo[moduleIndex].providerNodes[i] = providerIndex;
+			moduleInfo[moduleIndex].providedData[i] = dependencyArray[providerIndex][moduleIndex];
+			providerIndex++;
 		}
 	}
 
 	// node processing power (network graph)
+	fgets(lineBuffer, 32, networkGraphFile);
+	strtok(lineBuffer, " ");
+	tokenBuffer = strtok(NULL, "\n");
+	int numNodes = atoi(tokenBuffer);
 
 	// relevant link bandwidths/static delays... look at dependencies/module to node mappings to decide which links we care about (network graph)
 
