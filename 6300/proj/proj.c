@@ -3,8 +3,26 @@
 #include <errno.h>
 #include <string.h>
 
+#define MAX_LINE_LENGTH 32
+
 void ErrorCheck(int val, char *str);
 int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile);
+
+typedef struct
+{
+	int id;
+	int node;
+	double computation;
+	int numDependencies;
+	int *dependentNodes;
+	double *dataToProvide;
+	int *providerNodes;
+	double *providedData;
+} ModuleInfo;
+
+// variables found in the user provided files
+int numModules;
+ModuleInfo *moduleInfo;
 
 // beyond the info found in the user provided files we need:
 	// array of links with the number of files traveling over each link currently
@@ -33,6 +51,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
+	// close the files
 	fclose(mapFile);
 	fclose(networkGraphFile);
 	fclose(taskGraphFile);
@@ -51,11 +70,68 @@ void ErrorCheck(int val, char *str)
 
 int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile)
 {
+	char *lineBuffer;
+	lineBuffer = malloc(sizeof(char) * MAX_LINE_LENGTH);			// TODO: free
+	char *tokenBuffer;
+
 	// number, ids, and node mappings of modules (map file)
+	fgets(lineBuffer, 32, mapFile);
+	strtok(lineBuffer, " ");
+	tokenBuffer = strtok(NULL, "\n");
+	numModules = atoi(tokenBuffer);
+
+	moduleInfo = malloc(sizeof(ModuleInfo) * numModules);			// TODO: free
+
+	for(int moduleIndex = 0; moduleIndex < numModules; moduleIndex++)
+	{
+		fgets(lineBuffer, 32, mapFile);
+		tokenBuffer = strtok(lineBuffer, " ");
+		moduleInfo[moduleIndex].id = atoi(tokenBuffer);
+		tokenBuffer = strtok(NULL, "\n");
+		moduleInfo[moduleIndex].node = atoi(tokenBuffer);
+	}
 
 	// computational requirements of modules (task graph)
+	fgets(lineBuffer, 32, taskGraphFile);
+
+	for(int moduleIndex = 0; moduleIndex < numModules; moduleIndex++)
+	{
+		fgets(lineBuffer, 32, taskGraphFile);
+		strtok(lineBuffer, " ");
+		tokenBuffer = strtok(NULL, "\n");
+		moduleInfo[moduleIndex].computation = strtod(tokenBuffer, NULL);
+	}
 
 	// number of dependencies... which modules a node is dependent upon and how much data it needs from the other module (task graph)
+	fgets(lineBuffer, 32, taskGraphFile);
+	strtok(lineBuffer, " ");
+	strtok(NULL, " ");
+	tokenBuffer = strtok(NULL, "\n");
+	int numDependencies = atoi(tokenBuffer);
+
+	int dependenciesFound = 0;
+	int provider;
+	int dependent;
+	int nodeDependentCount[numModules];
+	int nodeProviderCount[numModules];
+	double dependencyArray[numModules][numModules];			// provider, dependent
+
+	while(dependenciesFound < numDependencies)
+	{
+		fgets(lineBuffer, 32, taskGraphFile);
+		tokenBuffer = strtok(lineBuffer, " ");
+		provider = atoi(tokenBuffer);
+		tokenBuffer = strtok(NULL, " ");
+		dependent = atoi(tokenBuffer);
+		tokenBuffer = strtok(NULL, "\n");
+		dependencyArray[provider][dependent] = strtod(tokenBuffer, NULL);
+		if(dependencyArray[provider][dependent] > 0)
+		{
+			nodeDependentCount[provider]++;
+			nodeProviderCount[dependent]++;
+			dependenciesFound++;
+		}
+	}
 
 	// node processing power (network graph)
 
