@@ -7,6 +7,7 @@
 
 void ErrorCheck(int val, char *str);
 int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile);
+void CalculateTimeRequirements();
 
 typedef struct
 {
@@ -42,8 +43,8 @@ int numNodes;
 NodeInfo *nodeInfo;
 
 // beyond the info found in the user provided files we need:
-	// array of links with the number of files traveling over each link currently
-	// array of nodes with the number of modules being executed currently
+	// array of links with the number of files traveling over each link currently and an "in use" flag
+	// array of nodes with the number of modules being executed currently and an "in use" flag
 	// transfer array... based partially on provided info
 	// execution array... based partially on provided info
 
@@ -73,6 +74,10 @@ int main(int argc, char *argv[])
 	fclose(networkGraphFile);
 	fclose(taskGraphFile);
 
+	// Prepare Transfer and Execution Arrays?
+
+	CalculateTimeRequirements();
+
 	return 0;
 }
 
@@ -88,7 +93,7 @@ void ErrorCheck(int val, char *str)
 int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile)
 {
 	char *lineBuffer;
-	lineBuffer = malloc(sizeof(char) * MAX_LINE_LENGTH);			// TODO: free
+	lineBuffer = malloc(sizeof(char) * MAX_LINE_LENGTH);
 	char *tokenBuffer;
 
 	// number, ids, and node mappings of modules (map file)
@@ -258,5 +263,27 @@ int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile)
 		}
 	}
 
+	free(lineBuffer);
+
 	return 0;
+}
+
+void CalculateTimeRequirements()
+{
+	// time = 0.0
+	// done = 0
+
+	// begin on module 0, which immediately begins transferring data to its dependents
+	// mark the needed links as in use
+	// increment the number in the currently used links/nodes and build the list of indices in the tables
+	
+	// while not done
+		// NOTE: HAVE TO DO TRANSFERS AND EXECUTIONS AT SAME TIME
+		// shortestTime = infinite?
+		// find and store the shortest time that is needed
+		// place the time value for the shortest transfer or execution in the array to signal its completion
+		// remove the finished one from its link/node
+		// calculate the amount of data or compuation time left for each transfer or execution
+		// advance time
+		// check that at least one node or link has work to do
 }
