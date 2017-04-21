@@ -268,10 +268,22 @@ int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile)
 	return 0;
 }
 
+// TODO: Not doing multiple runs together right now...
 void CalculateTimeRequirements()
 {
+	// !!!!!!!!!!!!!!!!!!!REMEMBER YOU FUCKING IDIOT!!!!!!!!!!!!!!!!!!!!!
+	// delay is only added once to a transfer... at the beginning
+	// BUT IT ISN'T ON THE LINK WHEN THE DELAY IS HAPPENING DUMBASS
+	// should check when a new transfer would begin if it needs to actually move nodes... if not it's instant
+
 	// time = 0.0
 	// done = 0
+	
+	// can fill in transfer remaining data for all...
+	// start time for any transfers starting at 0
+
+	// can fill in execution remaining comp for all...
+	// start time for module 0, along with the actual execution time (0 secs...)
 
 	// begin on module 0, which immediately begins transferring data to its dependents
 	// mark the needed links as in use
@@ -282,6 +294,7 @@ void CalculateTimeRequirements()
 		// shortestTime = infinite?
 		// find and store the shortest time that is needed
 		// place the time value for the shortest transfer or execution in the array to signal its completion
+		// check if the completion of the transfer/execution allows something else to start
 		// remove the finished one from its link/node
 		// calculate the amount of data or compuation time left for each transfer or execution
 		// advance time
