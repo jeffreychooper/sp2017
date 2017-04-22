@@ -82,10 +82,10 @@ int numNodes;
 NodeInfo *nodeInfo;
 
 // variables for keeping track of state
-int numLinksUsed;
+int numLinksUsed;			// done
 int numNodesUsed;
-int numDependencies;
-LinkInfo *linksUsed;
+int numDependencies;		// done
+LinkInfo *linksUsed;		// done
 NodeInfo *nodesUsed;
 TransferInfo *transferInfo;
 ExecutionInfo *executionInfo;
@@ -321,14 +321,41 @@ int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile)
 
 void PrepareStateVariables()
 {
-	// count the number of dependencies
+	// count the number of dependencies and unique nodes
+	int foundNodes[numModules];
+
 	for(int moduleIndex = 0; moduleIndex < numModules; moduleIndex++)
 	{
 		numDependencies += moduleInfo[moduleIndex].numDependents;
+
+		int found = 0;
+
+		for(int nodeIndex = 0; nodeIndex < numNodesUsed; nodeIndex++)
+			if(moduleInfo[moduleIndex].node == foundNodes[nodeIndex])
+				found = 1;
+
+		if(!found)
+		{
+			foundNodes[numNodesUsed] = moduleInfo[moduleIndex].node;
+			numNodesUsed++;
+		}
+	}
+
+	// store the unique nodes
+	nodesUsed = malloc(sizeof(NodeInfo) * numNodesUsed);
+
+	for(int i = 0; i < numNodesUsed; i++)
+	{
+		int id = foundNodes[i];
+		nodesUsed[i].id = id;
+		nodesUsed[i].processingPower = nodeInfo[id].processingPower;
+		nodesUsed[i].numUsing = 0;
+		nodesUsed[i].firstUsing = NULL;
+		nodesUsed[i].lastUsing = NULL;
 	}
 
 	// find all of the unique links used
-	int usedLinks[numDependencies][2];
+	int foundLinks[numDependencies][2];
 
 	for(int moduleIndex = 0; moduleIndex < numModules; moduleIndex++)
 	{
@@ -339,13 +366,13 @@ void PrepareStateVariables()
 			int found = 0;
 
 			for(int linkIndex = 0; linkIndex < numLinksUsed; linkIndex++)
-				if(usedLinks[linkIndex][0] == currModule.node && usedLinks[linkIndex][1] == currModule.dependentNodes[dependentIndex])
+				if(foundLinks[linkIndex][0] == currModule.node && foundLinks[linkIndex][1] == currModule.dependentNodes[dependentIndex])
 					found = 1;
 
 			if(!found)
 			{
-				usedLinks[numLinksUsed][0] = currModule.node;
-				usedLinks[numLinksUsed][1] = currModule.dependentNodes[dependentIndex];
+				foundLinks[numLinksUsed][0] = currModule.node;
+				foundLinks[numLinksUsed][1] = currModule.dependentNodes[dependentIndex];
 				numLinksUsed++;
 			}
 		}
@@ -357,8 +384,8 @@ void PrepareStateVariables()
 	for(int i = 0; i < numLinksUsed; i++)
 	{
 		linksUsed[i].id = i;
-		linksUsed[i].node1 = usedLinks[i][0];
-		linksUsed[i].node2 = usedLinks[i][1];
+		linksUsed[i].node1 = foundLinks[i][0];
+		linksUsed[i].node2 = foundLinks[i][1];
 		linksUsed[i].numUsing = 0;
 		linksUsed[i].firstUsing = NULL;
 		linksUsed[i].lastUsing = NULL;
