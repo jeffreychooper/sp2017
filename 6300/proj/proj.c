@@ -351,6 +351,19 @@ void PrepareStateVariables()
 		}
 	}
 
+	// store the unique links
+	linksUsed = malloc(sizeof(LinkInfo) * numLinksUsed);
+
+	for(int i = 0; i < numLinksUsed; i++)
+	{
+		linksUsed[i].id = i;
+		linksUsed[i].node1 = usedLinks[i][0];
+		linksUsed[i].node2 = usedLinks[i][1];
+		linksUsed[i].numUsing = 0;
+		linksUsed[i].firstUsing = NULL;
+		linksUsed[i].lastUsing = NULL;
+	}
+
 	// can fill in transfer remaining data for all...
 	// start time for any transfers starting at 0
 
