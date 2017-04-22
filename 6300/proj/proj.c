@@ -94,7 +94,7 @@ void ErrorCheck(int val, char *str);
 int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile);
 void PrepareStateVariables();
 void CalculateTimeRequirements();
-void AddIDInfo(int id, IDListInfo *first, IDListInfo *last);
+IDListInfo *AddIDInfo(int id, IDListInfo *first, IDListInfo *last);
 void RemoveIDInfo(IDListInfo *info, IDListInfo *first, IDListInfo *last);
 
 int main(int argc, char *argv[])
@@ -413,9 +413,50 @@ void PrepareStateVariables()
 		}
 	}
 
-	// can fill in execution remaining comp for all...
-	// start time for module 0, along with the actual execution time (0 secs...)
+	// store the known execution info
+	executionInfo = malloc(sizeof(ExecutionInfo) * numModules);			// TODO: free
 
+	for(int moduleIndex = 0; moduleIndex < numModules; moduleIndex++)
+	{
+		ModuleInfo currModule = moduleInfo[moduleIndex];
+
+		executionInfo[moduleIndex].moduleID = moduleIndex;
+
+		if(currModule.numProviders == 1)
+		{
+			// currModule.providerModules[0]
+			executionInfo[moduleIndex].firstDependency = AddIDInfo(currModule.providerModules[0], NULL, NULL);
+			executionInfo[moduleIndex].lastDependency = executionInfo[moduleIndex].firstDependency;
+			
+			executionInfo[moduleIndex].dependencyMet = malloc(sizeof(int) * currModule.numProviders);
+			executionInfo[moduleIndex].dependencyMet[0] = 0;
+		}
+		else if(currModule.numProviders > 0)
+		{
+			executionInfo[moduleIndex].firstDependency = AddIDInfo(currModule.providerModules[0], NULL, NULL);
+			executionInfo[moduleIndex].lastDependency = executionInfo[moduleIndex].firstDependency;
+
+			for(int i = 1; i < currModule.numProviders; i++)
+			{
+				executionInfo[moduleIndex].lastDependency = AddIDInfo(currModule.providerModules[i], executionInfo[moduleIndex].firstDependency, executionInfo[moduleIndex].lastDependency);
+			}
+
+			executionInfo[moduleIndex].dependencyMet = malloc(sizeof(int) * currModule.numProviders);
+
+			for(int i = 0; i < currModule.numProviders; i++)
+			{
+				executionInfo[moduleIndex].dependencyMet[i] = 0;
+			}
+		}
+		else
+		{
+			executionInfo[moduleIndex].firstDependency = NULL;
+			executionInfo[moduleIndex].lastDependency = NULL;
+			executionInfo[moduleIndex].dependencyMet = NULL;
+		}
+
+		executionInfo[moduleIndex].remainingComputation = currModule.computationalComplexity;
+	}
 }
 
 // TODO: Not doing multiple runs together right now...
@@ -445,7 +486,7 @@ void CalculateTimeRequirements()
 		// check that at least one node or link has work to do
 }
 
-void AddIDInfo(int id, IDListInfo *first, IDListInfo *last)
+IDListInfo *AddIDInfo(int id, IDListInfo *first, IDListInfo *last)
 {
 	IDListInfo *newInfo = malloc(sizeof(IDListInfo));
 
@@ -454,13 +495,19 @@ void AddIDInfo(int id, IDListInfo *first, IDListInfo *last)
 	if(first == NULL)
 	{
 		first = newInfo;
+		newInfo->prevInfoPointer = NULL;
+		newInfo->nextInfoPointer = NULL;
 	}
 	else
 	{
 		last->nextInfoPointer = newInfo;
+		newInfo->prevInfoPointer = last;
+		newInfo->nextInfoPointer = NULL;
 	}
 
 	last = newInfo;
+
+	return newInfo;
 }
 
 void RemoveIDInfo(IDListInfo *info, IDListInfo *first, IDListInfo *last)
