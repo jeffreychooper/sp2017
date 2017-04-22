@@ -1,4 +1,4 @@
-// TODO: All sorts of efficiency issues... Triple loops everywhere! :|
+// TODO: All sorts of efficiency issues... Triple loops everywhere :|
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -83,10 +83,10 @@ NodeInfo *nodeInfo;
 
 // variables for keeping track of state
 int numLinksUsed;			// done
-int numNodesUsed;
+int numNodesUsed;			// done
 int numDependencies;		// done
 LinkInfo *linksUsed;		// done
-NodeInfo *nodesUsed;
+NodeInfo *nodesUsed;		// done
 TransferInfo *transferInfo;
 ExecutionInfo *executionInfo;
 
@@ -342,7 +342,7 @@ void PrepareStateVariables()
 	}
 
 	// store the unique nodes
-	nodesUsed = malloc(sizeof(NodeInfo) * numNodesUsed);
+	nodesUsed = malloc(sizeof(NodeInfo) * numNodesUsed);			// TODO: free
 
 	for(int i = 0; i < numNodesUsed; i++)
 	{
@@ -379,7 +379,7 @@ void PrepareStateVariables()
 	}
 
 	// store the unique links
-	linksUsed = malloc(sizeof(LinkInfo) * numLinksUsed);
+	linksUsed = malloc(sizeof(LinkInfo) * numLinksUsed);			// TODO: free
 
 	for(int i = 0; i < numLinksUsed; i++)
 	{
@@ -391,8 +391,27 @@ void PrepareStateVariables()
 		linksUsed[i].lastUsing = NULL;
 	}
 
-	// can fill in transfer remaining data for all...
-	// start time for any transfers starting at 0
+	// store the known transfer info
+	transferInfo = malloc(sizeof(TransferInfo) * numDependencies);			// TODO: free
+
+	int transferIndex = 0;
+
+	for(int moduleIndex = 0; moduleIndex < numModules; moduleIndex++)
+	{
+		ModuleInfo currModule = moduleInfo[moduleIndex];
+
+		for(int dependentIndex = 0; dependentIndex < currModule.numDependents; dependentIndex++)
+		{
+			for(int linkIndex = 0; linkIndex < numLinksUsed; linkIndex++)
+				if(foundLinks[linkIndex][0] == currModule.node && foundLinks[linkIndex][1] == currModule.dependentNodes[dependentIndex])
+					transferInfo[transferIndex].linkID = linkIndex;
+
+			transferInfo[transferIndex].remainingData = currModule.dataToProvide[dependentIndex];
+			transferInfo[transferIndex].remainingDelay = currModule.dependentDelays[dependentIndex];
+
+			transferIndex++;
+		}
+	}
 
 	// can fill in execution remaining comp for all...
 	// start time for module 0, along with the actual execution time (0 secs...)
@@ -448,8 +467,6 @@ void RemoveIDInfo(IDListInfo *info, IDListInfo *first, IDListInfo *last)
 {
 	if(info == first)
 	{
-		free(info);
-
 		first = NULL;
 		last = NULL;
 	}
@@ -457,14 +474,12 @@ void RemoveIDInfo(IDListInfo *info, IDListInfo *first, IDListInfo *last)
 	{
 		last = info->prevInfoPointer;
 		last->nextInfoPointer = NULL;
-		
-		free(info);
 	}
 	else
 	{
 		info->prevInfoPointer->nextInfoPointer = info->nextInfoPointer;
 		info->nextInfoPointer->prevInfoPointer = info->prevInfoPointer;
-
-		free(info);
 	}
+
+	free(info);
 }
