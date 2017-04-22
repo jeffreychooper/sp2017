@@ -1,3 +1,4 @@
+// TODO: All sorts of efficiency issues... Triple loops everywhere! :|
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -5,9 +6,14 @@
 
 #define MAX_LINE_LENGTH 32
 
-void ErrorCheck(int val, char *str);
-int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile);
-void CalculateTimeRequirements();
+typedef struct IDListInfo IDListInfo;
+
+struct IDListInfo
+{
+	int id;
+	IDListInfo *prevInfoPointer;
+	IDListInfo *nextInfoPointer;
+};
 
 typedef struct
 {
@@ -34,7 +40,40 @@ typedef struct
 {
 	int id;
 	double processingPower;
+	int numUsing;
+	IDListInfo *firstUsing;
+	IDListInfo *lastUsing;
 } NodeInfo;
+
+typedef struct
+{
+	int id;
+	int node1;
+	int node2;
+	int numUsing;
+	IDListInfo *firstUsing;
+	IDListInfo *lastUsing;
+} LinkInfo;
+
+typedef struct
+{
+	int linkID;
+	double startTime;
+	double timeToTransfer;
+	double remainingData;
+	double remainingDelay;
+} TransferInfo;
+
+typedef struct
+{
+	int moduleID;
+	IDListInfo *firstDependency;
+	IDListInfo *lastDependency;
+	int *dependencyMet;
+	double startTime;
+	double timeToExecute;
+	double remainingComputation;
+} ExecutionInfo;
 
 // variables found in the user provided files
 int numModules;
@@ -42,11 +81,21 @@ ModuleInfo *moduleInfo;
 int numNodes;
 NodeInfo *nodeInfo;
 
-// beyond the info found in the user provided files we need:
-	// array of links with the number of files traveling over each link currently and an "in use" flag
-	// array of nodes with the number of modules being executed currently and an "in use" flag
-	// transfer array... based partially on provided info
-	// execution array... based partially on provided info
+// variables for keeping track of state
+int numLinksUsed;
+int numNodesUsed;
+int numDependencies;
+LinkInfo *linksUsed;
+NodeInfo *nodesUsed;
+TransferInfo *transferInfo;
+ExecutionInfo *executionInfo;
+
+void ErrorCheck(int val, char *str);
+int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile);
+void PrepareStateVariables();
+void CalculateTimeRequirements();
+void AddIDInfo(int id, IDListInfo *first, IDListInfo *last);
+void RemoveIDInfo(IDListInfo *info, IDListInfo *first, IDListInfo *last);
 
 int main(int argc, char *argv[])
 {
@@ -74,9 +123,11 @@ int main(int argc, char *argv[])
 	fclose(networkGraphFile);
 	fclose(taskGraphFile);
 
-	// Prepare Transfer and Execution Arrays?
+	PrepareStateVariables();
 
 	CalculateTimeRequirements();
+
+	// clear any remaining memory
 
 	return 0;
 }
@@ -268,6 +319,46 @@ int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile)
 	return 0;
 }
 
+void PrepareStateVariables()
+{
+	// count the number of dependencies
+	for(int moduleIndex = 0; moduleIndex < numModules; moduleIndex++)
+	{
+		numDependencies += moduleInfo[moduleIndex].numDependents;
+	}
+
+	// find all of the unique links used
+	int usedLinks[numDependencies][2];
+
+	for(int moduleIndex = 0; moduleIndex < numModules; moduleIndex++)
+	{
+		ModuleInfo currModule = moduleInfo[moduleIndex];
+
+		for(int dependentIndex = 0; dependentIndex < currModule.numDependents; dependentIndex++)
+		{
+			int found = 0;
+
+			for(int linkIndex = 0; linkIndex < numLinksUsed; linkIndex++)
+				if(usedLinks[linkIndex][0] == currModule.node && usedLinks[linkIndex][1] == currModule.dependentNodes[dependentIndex])
+					found = 1;
+
+			if(!found)
+			{
+				usedLinks[numLinksUsed][0] = currModule.node;
+				usedLinks[numLinksUsed][1] = currModule.dependentNodes[dependentIndex];
+				numLinksUsed++;
+			}
+		}
+	}
+
+	// can fill in transfer remaining data for all...
+	// start time for any transfers starting at 0
+
+	// can fill in execution remaining comp for all...
+	// start time for module 0, along with the actual execution time (0 secs...)
+
+}
+
 // TODO: Not doing multiple runs together right now...
 void CalculateTimeRequirements()
 {
@@ -279,12 +370,6 @@ void CalculateTimeRequirements()
 	// time = 0.0
 	// done = 0
 	
-	// can fill in transfer remaining data for all...
-	// start time for any transfers starting at 0
-
-	// can fill in execution remaining comp for all...
-	// start time for module 0, along with the actual execution time (0 secs...)
-
 	// begin on module 0, which immediately begins transferring data to its dependents
 	// mark the needed links as in use
 	// increment the number in the currently used links/nodes and build the list of indices in the tables
@@ -299,4 +384,47 @@ void CalculateTimeRequirements()
 		// calculate the amount of data or compuation time left for each transfer or execution
 		// advance time
 		// check that at least one node or link has work to do
+}
+
+void AddIDInfo(int id, IDListInfo *first, IDListInfo *last)
+{
+	IDListInfo *newInfo = malloc(sizeof(IDListInfo));
+
+	newInfo->id = id;
+	
+	if(first == NULL)
+	{
+		first = newInfo;
+	}
+	else
+	{
+		last->nextInfoPointer = newInfo;
+	}
+
+	last = newInfo;
+}
+
+void RemoveIDInfo(IDListInfo *info, IDListInfo *first, IDListInfo *last)
+{
+	if(info == first)
+	{
+		free(info);
+
+		first = NULL;
+		last = NULL;
+	}
+	else if(info == last)
+	{
+		last = info->prevInfoPointer;
+		last->nextInfoPointer = NULL;
+		
+		free(info);
+	}
+	else
+	{
+		info->prevInfoPointer->nextInfoPointer = info->nextInfoPointer;
+		info->nextInfoPointer->prevInfoPointer = info->prevInfoPointer;
+
+		free(info);
+	}
 }
