@@ -74,7 +74,7 @@ typedef struct
 	int moduleID;
 	IDListInfo *firstDependency;
 	IDListInfo *lastDependency;
-	int *dependencyMet;
+	int *dependencyMet;				// TODO: I never update this... should I just get rid of it?
 	double startTime;
 	double endTime;
 	double remainingComputation;
@@ -505,7 +505,6 @@ void CalculateTimeRequirements()
 	
 	while(!done)
 	{
-		// NOTE: HAVE TO DO TRANSFERS AND EXECUTIONS AT SAME TIME
 		double shortestTime = DBL_MAX;
 		int shortestIsTransfer = 0;
 		int shortestIsDelay = 0;
@@ -671,7 +670,39 @@ void CalculateTimeRequirements()
 		// check if the completion of the transfer/execution allows something else to start
 		if(!shortestIsDelay)
 		{
+			if(shortestIsTransfer)
+			{
+				TransferInfo currTransfer = transferInfo[shortestIndex];
+				ExecutionInfo *dependentExecution = &executionInfo[currTransfer.module2];
 
+				RemoveIDInfoByID(currTransfer.module1, dependentExecution->firstDependency, dependentExecution->lastDependency);
+
+				if(dependentExecution->firstDependency == NULL)
+				{
+					dependentExecution->startTime = currTime;
+				}
+			}
+			else
+			{
+				ExecutionInfo currExecution = executionInfo[shortestIndex];
+				ModuleInfo currModule = moduleInfo[shortestIndex];
+				
+				for(int dependentIndex = 0; dependentIndex < currModule.numDependents; dependentIndex++)
+				{
+					TransferInfo *dependentTransfer;
+
+					for(int transferIndex = 0; transferIndex < numDependencies; transferIndex++)
+					{
+						if(transferInfo[transferIndex].module1 == currModule.id && transferInfo[transferIndex].module2 == currModule.dependentModules[dependentIndex])
+						{
+							dependentTransfer = &transferInfo[transferIndex];
+							break;
+						}
+					}
+
+					dependentTransfer->startTime = currTime;
+				}
+			}
 		}
 
 		// check that at least one node or link has work to do
