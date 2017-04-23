@@ -51,6 +51,8 @@ typedef struct
 	int id;
 	int node1;
 	int node2;
+	double bandwidth;
+	double delay;
 	int numUsing;
 	IDListInfo *firstUsing;
 	IDListInfo *lastUsing;
@@ -58,24 +60,24 @@ typedef struct
 
 typedef struct
 {
-	int linkID;				// set
-	int module1;			// set
-	int module2;			// set
+	int linkID;
+	int module1;
+	int module2;
 	double startTime;
 	double endTime;
-	double remainingData;	// set
-	double remainingDelay;	// set
+	double remainingData;
+	double remainingDelay;
 } TransferInfo;
 
 typedef struct
 {
-	int moduleID;					// set
-	IDListInfo *firstDependency;	// set (possibly null)
-	IDListInfo *lastDependency;		// set (possibly null)
-	int *dependencyMet;				// set (possibly null)
+	int moduleID;
+	IDListInfo *firstDependency;
+	IDListInfo *lastDependency;
+	int *dependencyMet;
 	double startTime;
 	double endTime;
-	double remainingComputation;	// set
+	double remainingComputation;
 } ExecutionInfo;
 
 // variables found in the user provided files
@@ -99,6 +101,7 @@ void PrepareStateVariables();
 void CalculateTimeRequirements();
 IDListInfo *AddIDInfo(int id, IDListInfo *first, IDListInfo *last);
 void RemoveIDInfo(IDListInfo *info, IDListInfo *first, IDListInfo *last);
+void RemoveIDInfoByID(int id, IDListInfo *first, IDListInfo *last);
 
 int main(int argc, char *argv[])
 {
@@ -359,6 +362,7 @@ void PrepareStateVariables()
 
 	// find all of the unique links used
 	int foundLinks[numDependencies][2];
+	double linkBandwidthAndDelay[numDependencies][2];
 
 	for(int moduleIndex = 0; moduleIndex < numModules; moduleIndex++)
 	{
@@ -376,6 +380,8 @@ void PrepareStateVariables()
 			{
 				foundLinks[numLinksUsed][0] = currModule.node;
 				foundLinks[numLinksUsed][1] = currModule.dependentNodes[dependentIndex];
+				linkBandwidthAndDelay[numLinksUsed][0] = currModule.dependentBandwidths[dependentIndex];
+				linkBandwidthAndDelay[numLinksUsed][1] = currModule.dependentDelays[dependentIndex];
 				numLinksUsed++;
 			}
 		}
@@ -389,10 +395,14 @@ void PrepareStateVariables()
 		linksUsed[i].id = i;
 		linksUsed[i].node1 = foundLinks[i][0];
 		linksUsed[i].node2 = foundLinks[i][1];
+		linksUsed[i].bandwidth = linkBandwidthAndDelay[i][0];
+		linksUsed[i].delay = linkBandwidthAndDelay[i][1];
 		linksUsed[i].numUsing = 0;
 		linksUsed[i].firstUsing = NULL;
 		linksUsed[i].lastUsing = NULL;
 	}
+
+	// store the 
 
 	// store the known transfer info
 	transferInfo = malloc(sizeof(TransferInfo) * numDependencies);			// TODO: free
@@ -484,38 +494,135 @@ void CalculateTimeRequirements()
 	executionInfo[0].startTime = currentTime;
 	executionInfo[0].endTime = currentTime;
 
-	for(int transferIndex = 0; transferIndex < numDependencies; transferIndex++)
+	// could do this if we wanted the transfer on the link during the delay...
+	/* for(int transferIndex = 0; transferIndex < numDependencies; transferIndex++)
 	{
-		TransferInfo currTransfer = transferInfo[transferIndex];
+		TransferInfo *currTransfer = &transferInfo[transferIndex];
 		if(currTransfer.module1 == 0)
 		{
-			linksUsed[currTransfer.linkID].numUsing++;
-
-			linksUsed[currTransfer.linkID].lastUsing = AddIDInfo(transferIndex, linksUsed[currTransfer.linkID].firstUsing, linksUsed[currTransfer.linkID].lastUsing);
-
-			if(linksUsed[currTransfer.linkID].firstUsing == NULL)
-				linksUsed[currTransfer.linkID].firstUsing = linksUsed[currTransfer.linkID].lastUsing;
+			currTransfer->startTime = currTime;
 		}
-	}
+	}*/
 	
 	while(!done)
 	{
 		// NOTE: HAVE TO DO TRANSFERS AND EXECUTIONS AT SAME TIME
-		double shortestTime = 9999999.9;
+		double shortestTime = DBL_MAX;
 		int shortestIsTransfer = 0;
+		int shortestIsDelay = 0;
 		int shortestIndex = -1;
 
 		// find and store the shortest time that is needed
 		for(int executionIndex = 0; executionIndex < numModules; executionIndex++)
 		{
-			
+			ExecutionInfo currExecution = executionInfo[executionIndex];
+			ModuleInfo currModule = moduleInfo[executionIndex];
+			NodeInfo currNode;
+
+			for(int nodeIndex = 0; nodeIndex < numNodesUsed; nodeIndex++)
+			{
+				if(nodesUsed[nodeIndex].id = currModule.node)
+				{
+					currNode = nodesUsed[nodeIndex];
+					break;
+				}
+			}
+
+			if(currExecution.startTime <= currentTime && currExecution.endTime > currentTime)
+			{
+				double effectiveProcessingPower = currNode.processingPower / (double)currNode.numUsing;
+				double timeToFinish = currExecution.remainingComputation / effectiveProcessingPower;
+
+				if(timeToFinish < shortestTime)
+				{
+					shortestTime = timeToFinish;
+					shortestIndex = executionIndex;
+				}
+			}
 		}
 
-		// place the time value for the shortest transfer or execution in the array to signal its completion
-		// check if the completion of the transfer/execution allows something else to start
-		// remove the finished one from its link/node
-		// calculate the amount of data or compuation time left for each transfer or execution
+		for(int transferIndex = 0; transferIndex < numDependencies; transferIndex++)
+		{
+			TransferInfo currTransfer = transferInfo[transferIndex];
+			LinkInfo currLink = linksUsed[currTransfer.linkID];
+
+			// check delay first
+			if(currTransfer.remainingDelay > 0)
+			{
+				if(currTransfer.remainingDelay < shortestTime)
+				{
+					shortestTime = currTransfer.remainingDelay;
+					shortestIsDelay = 1;
+					shortestIndex = transferIndex;
+				}
+			}
+			else if(currTransfer.startTime <= currentTime && currTransfer.endTime > currentTime)
+			{
+				double effectiveBandwidth = currLink.bandwidth / (double)currLink.numUsing;
+				double timeToFinish	= currTransfer.remainingData / effectiveBandwidth;
+
+				if(timeToFinish < shortestTime)
+				{
+					shortestTime = timeToFinish;
+					shortestIsTransfer = 1;
+					shortestIsDelay = 0;
+					shortestIndex = transferIndex;
+				}
+			}
+		}
+
 		// advance time
+		currentTime += shortestTime;
+
+		// place the time value for the shortest transfer or execution in the array to signal its completion
+		// remove the finished one from its link/node (or add it if the delay just finished)
+		if(shortestIsDelay)
+		{
+			TransferInfo *currTransfer = &transferInfo[shortestIndex];
+
+			currTransfer->remainingDelay = 0.0;
+			currTransfer->startTime = currentTime;
+
+			linksUsed[currTransfer->linkID].numUsing++;
+
+			linksUsed[currTransfer->linkID].lastUsing = AddIDInfo(shortestIndex, linksUsed[currTransfer->linkID].firstUsing, linksUsed[currTransfer->linkID].lastUsing);
+			if(linksUsed[currTransfer->linkID].firstUsing == NULL)
+				linksUsed[currTransfer->linkID].firstUsing = linksUsed[currTransfer->linkID].lastUsing;
+		}
+		else if(shortestIsTransfer)
+		{
+			TransferInfo *currTransfer = &transferInfo[shortestIndex];
+
+			currTransfer->remainingData = 0.0;
+			currTransfer->endTime = currentTime;
+
+			linksUsed[currTransfer->linkID].numUsing--;
+			RemoveIDInfoByID(shortestIndex, linksUsed[currTransfer->linkID].firstUsing, linksUsed[currTransfer->linkID].lastUsing);
+		}
+		else
+		{
+			ExecutionInfo *currExecution = &executionInfo[shortestIndex];
+
+			currExecution->remainingComputation =  0.0;
+			currExecution->endTime = currentTime;
+
+			NodeInfo *currNode;
+			for(int nodeIndex = 0; nodeIndex < numNodesUsed; nodeIndex++)
+			{
+				if(nodesUsed[nodeIndex].id == moduleInfo[shortestIndex].node)
+				{
+					currNode = &nodesUsed[nodeIndex];
+				}
+			}
+
+			currNode->numUsing--;
+			RemoveIDInfoByID(shortestIndex, currNode->firstUsing, currNode->lastUsing);
+		}
+
+		// check if the completion of the transfer/execution allows something else to start
+
+		// calculate the amount of data or compuation time left for each transfer or execution
+
 		// check that at least one node or link has work to do
 	}
 }
@@ -563,4 +670,20 @@ void RemoveIDInfo(IDListInfo *info, IDListInfo *first, IDListInfo *last)
 	}
 
 	free(info);
+}
+
+void RemoveIDInfoByID(int id, IDListInfo *first, IDListInfo *last)
+{
+	IDListInfo *currInfo = first;
+
+	while(currInfo != NULL)
+	{
+		if(currInfo->id == id)
+		{
+			RemoveIDInfo(currInfo, first, last);
+			return;
+		}
+
+		currInfo = currInfo->nextInfoPointer;
+	}
 }
