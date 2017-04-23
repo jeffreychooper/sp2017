@@ -486,23 +486,22 @@ void CalculateTimeRequirements()
 	// BUT IT ISN'T ON THE LINK WHEN THE DELAY IS HAPPENING DUMBASS
 	// should check when a new transfer would begin if it needs to actually move nodes... if not it's instant
 
-	double currentTime = 0.0;
+	double currTime = 0.0;
 	int done = 0;
 	
 	// module 0 instantly begins transferring data to its dependents
 	// prepare the data structures for tracking the links it will use
-	executionInfo[0].startTime = currentTime;
-	executionInfo[0].endTime = currentTime;
+	executionInfo[0].startTime = currTime;
+	executionInfo[0].endTime = currTime;
 
-	// could do this if we wanted the transfer on the link during the delay...
-	/* for(int transferIndex = 0; transferIndex < numDependencies; transferIndex++)
+	for(int transferIndex = 0; transferIndex < numDependencies; transferIndex++)
 	{
 		TransferInfo *currTransfer = &transferInfo[transferIndex];
-		if(currTransfer.module1 == 0)
+		if(currTransfer->module1 == 0)
 		{
 			currTransfer->startTime = currTime;
 		}
-	}*/
+	}
 	
 	while(!done)
 	{
@@ -521,14 +520,14 @@ void CalculateTimeRequirements()
 
 			for(int nodeIndex = 0; nodeIndex < numNodesUsed; nodeIndex++)
 			{
-				if(nodesUsed[nodeIndex].id = currModule.node)
+				if(nodesUsed[nodeIndex].id == currModule.node)
 				{
 					currNode = nodesUsed[nodeIndex];
 					break;
 				}
 			}
 
-			if(currExecution.startTime <= currentTime && currExecution.endTime > currentTime)
+			if(currExecution.startTime <= currTime && currExecution.endTime > currTime)
 			{
 				double effectiveProcessingPower = currNode.processingPower / (double)currNode.numUsing;
 				double timeToFinish = currExecution.remainingComputation / effectiveProcessingPower;
@@ -547,7 +546,7 @@ void CalculateTimeRequirements()
 			LinkInfo currLink = linksUsed[currTransfer.linkID];
 
 			// check delay first
-			if(currTransfer.remainingDelay > 0)
+			if(currTransfer.startTime <= currTime && currTransfer.remainingDelay > 0)
 			{
 				if(currTransfer.remainingDelay < shortestTime)
 				{
@@ -556,7 +555,7 @@ void CalculateTimeRequirements()
 					shortestIndex = transferIndex;
 				}
 			}
-			else if(currTransfer.startTime <= currentTime && currTransfer.endTime > currentTime)
+			else if(currTransfer.startTime <= currTime && currTransfer.endTime > currTime)
 			{
 				double effectiveBandwidth = currLink.bandwidth / (double)currLink.numUsing;
 				double timeToFinish	= currTransfer.remainingData / effectiveBandwidth;
@@ -572,7 +571,57 @@ void CalculateTimeRequirements()
 		}
 
 		// advance time
-		currentTime += shortestTime;
+		currTime += shortestTime;
+
+		// calculate the amount of data or compuation time left for each transfer or execution
+		for(int executionIndex = 0; executionIndex < numModules; executionIndex++)
+		{
+			ExecutionInfo *currExecution = &executionInfo[executionIndex];
+			ModuleInfo currModule = moduleInfo[executionIndex];
+
+			if(currExecution->startTime < currTime && currExecution->endTime > currTime)
+			{
+				NodeInfo currNode;
+
+				for(int nodeIndex = 0; nodeIndex < numNodesUsed; nodeIndex++)
+				{
+					if(nodesUsed[nodeIndex].id == currModule.node)
+					{
+						currNode = nodesUsed[nodeIndex];
+						break;
+					}
+				}
+
+				double nodeComputation = shortestTime * currNode.processingPower;
+				double moduleComputation = nodeComputation / (double)currNode.numUsing;
+
+				currExecution->remainingComputation -= moduleComputation;
+
+				// TODO: check if it finished and do necessary stuff
+			}
+		}
+
+		for(int transferIndex = 0; transferIndex < numDependencies; transferIndex++)
+		{
+			TransferInfo *currTransfer = &transferInfo[transferIndex];
+
+			if(currTransfer->startTime <= currTime && currTransfer->remainingDelay > 0)
+			{
+				currTransfer->remainingDelay -= shortestTime;
+
+				// TODO: check if it finished and do necessary stuff
+			}
+			else if(currTransfer->startTime <= currTime && currTransfer->endTime > currTime)
+			{
+				LinkInfo currLink = linksUsed[currTransfer->linkID];
+
+				double linkBandwidth = shortestTime * currLink.bandwidth;
+				double transferBandwidth = linkBandwidth / (double)currLink.numUsing;
+
+
+				// TODO: check if it finished and do necessary stuff
+			}
+		}
 
 		// place the time value for the shortest transfer or execution in the array to signal its completion
 		// remove the finished one from its link/node (or add it if the delay just finished)
@@ -581,7 +630,7 @@ void CalculateTimeRequirements()
 			TransferInfo *currTransfer = &transferInfo[shortestIndex];
 
 			currTransfer->remainingDelay = 0.0;
-			currTransfer->startTime = currentTime;
+			currTransfer->startTime = currTime;
 
 			linksUsed[currTransfer->linkID].numUsing++;
 
@@ -594,7 +643,7 @@ void CalculateTimeRequirements()
 			TransferInfo *currTransfer = &transferInfo[shortestIndex];
 
 			currTransfer->remainingData = 0.0;
-			currTransfer->endTime = currentTime;
+			currTransfer->endTime = currTime;
 
 			linksUsed[currTransfer->linkID].numUsing--;
 			RemoveIDInfoByID(shortestIndex, linksUsed[currTransfer->linkID].firstUsing, linksUsed[currTransfer->linkID].lastUsing);
@@ -604,7 +653,7 @@ void CalculateTimeRequirements()
 			ExecutionInfo *currExecution = &executionInfo[shortestIndex];
 
 			currExecution->remainingComputation =  0.0;
-			currExecution->endTime = currentTime;
+			currExecution->endTime = currTime;
 
 			NodeInfo *currNode;
 			for(int nodeIndex = 0; nodeIndex < numNodesUsed; nodeIndex++)
@@ -620,8 +669,10 @@ void CalculateTimeRequirements()
 		}
 
 		// check if the completion of the transfer/execution allows something else to start
+		if(!shortestIsDelay)
+		{
 
-		// calculate the amount of data or compuation time left for each transfer or execution
+		}
 
 		// check that at least one node or link has work to do
 	}
