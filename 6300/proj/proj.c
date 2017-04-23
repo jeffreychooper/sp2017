@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <float.h>
 
 #define MAX_LINE_LENGTH 32
 
@@ -61,7 +62,7 @@ typedef struct
 	int module1;			// set
 	int module2;			// set
 	double startTime;
-	double timeToTransfer;
+	double endTime;
 	double remainingData;	// set
 	double remainingDelay;	// set
 } TransferInfo;
@@ -73,7 +74,7 @@ typedef struct
 	IDListInfo *lastDependency;		// set (possibly null)
 	int *dependencyMet;				// set (possibly null)
 	double startTime;
-	double timeToExecute;
+	double endTime;
 	double remainingComputation;	// set
 } ExecutionInfo;
 
@@ -412,6 +413,8 @@ void PrepareStateVariables()
 			transferInfo[transferIndex].module2 = currModule.dependentModules[dependentIndex];
 			transferInfo[transferIndex].remainingData = currModule.dataToProvide[dependentIndex];
 			transferInfo[transferIndex].remainingDelay = currModule.dependentDelays[dependentIndex];
+			transferInfo[transferIndex].startTime = DBL_MAX;
+			transferInfo[transferIndex].endTime = DBL_MAX;
 
 			transferIndex++;
 		}
@@ -460,6 +463,8 @@ void PrepareStateVariables()
 		}
 
 		executionInfo[moduleIndex].remainingComputation = currModule.computationalComplexity;
+		executionInfo[moduleIndex].startTime = DBL_MAX;
+		executionInfo[moduleIndex].endTime = DBL_MAX;
 	}
 }
 
@@ -474,11 +479,10 @@ void CalculateTimeRequirements()
 	double currentTime = 0.0;
 	int done = 0;
 	
-	// begin on module 0, which immediately begins transferring data to its dependents
-	// mark the needed links as in use
-	// increment the number in the currently used links/nodes and build the list of indices in the tables
+	// module 0 instantly begins transferring data to its dependents
+	// prepare the data structures for tracking the links it will use
 	executionInfo[0].startTime = currentTime;
-	executionInfo[0].timeToExecute = currentTime;
+	executionInfo[0].endTime = currentTime;
 
 	for(int transferIndex = 0; transferIndex < numDependencies; transferIndex++)
 	{
@@ -494,16 +498,26 @@ void CalculateTimeRequirements()
 		}
 	}
 	
-	// while not done
+	while(!done)
+	{
 		// NOTE: HAVE TO DO TRANSFERS AND EXECUTIONS AT SAME TIME
-		// shortestTime = infinite?
+		double shortestTime = 9999999.9;
+		int shortestIsTransfer = 0;
+		int shortestIndex = -1;
+
 		// find and store the shortest time that is needed
+		for(int executionIndex = 0; executionIndex < numModules; executionIndex++)
+		{
+			
+		}
+
 		// place the time value for the shortest transfer or execution in the array to signal its completion
 		// check if the completion of the transfer/execution allows something else to start
 		// remove the finished one from its link/node
 		// calculate the amount of data or compuation time left for each transfer or execution
 		// advance time
 		// check that at least one node or link has work to do
+	}
 }
 
 IDListInfo *AddIDInfo(int id, IDListInfo *first, IDListInfo *last)
