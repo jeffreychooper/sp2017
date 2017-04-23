@@ -624,6 +624,8 @@ void CalculateTimeRequirements()
 
 				if(currExecution->remainingComputation <= 0)
 				{
+					currExecution->endTime = currTime;
+
 					nodeNumbersToDecrement[currNodeIndex][nodeCountToDecrement] = currModule.id;
 					nodeCountToDecrement++;
 
@@ -669,8 +671,24 @@ void CalculateTimeRequirements()
 				double linkBandwidth = shortestTime * currLink.bandwidth;
 				double transferBandwidth = linkBandwidth / (double)currLink.numUsing;
 
+				currTransfer->remainingData -= transferBandwidth;
 
-				// TODO: check if it finished and do necessary stuff
+				if(currTransfer->remainingData <= 0)
+				{
+					currTransfer->endTime = currTime;
+
+					linkNumbersToDecrement[currTransfer->linkID][linkCountToDecrement] = transferIndex;
+					linkCountToDecrement++;
+
+					ExecutionInfo *dependentExecution = &executionInfo[currTransfer->module2];
+
+					RemoveIDInfoByID(currTransfer->module1, dependentExecution->firstDependency, dependentExecution->lastDependency);
+
+					if(dependentExecution->firstDependency == NULL)
+					{
+						dependentExecution->startTime = currTime;
+					}
+				}
 			}
 		}
 
@@ -754,6 +772,84 @@ void CalculateTimeRequirements()
 
 					dependentTransfer->startTime = currTime;
 				}
+			}
+		}
+
+		// remove the "non-shortest" that finished from links/nodes
+		int decrementIndex = 0;
+
+		if(nodeCountToDecrement > 0)
+		{
+			for(int nodeIndex = 0; nodeIndex < numNodesUsed; nodeIndex++)
+			{
+				for(int moduleIndex = 0; moduleIndex < numModules; moduleIndex++)
+				{
+					if(nodeNumbersToDecrement[nodeIndex][moduleIndex] != -1)
+					{
+						NodeInfo *currNode = &nodesUsed[nodeIndex];
+						currNode->numUsing--;
+						RemoveIDInfoByID(nodeNumbersToDecrement[nodeIndex][moduleIndex], currNode->firstUsing, currNode->lastUsing);
+						decrementIndex++;
+
+						if(decrementIndex == nodeCountToDecrement)
+							break;
+					}
+				}
+
+				if(decrementIndex == nodeCountToDecrement)
+					break;
+			}
+		}
+
+		decrementIndex = 0;
+
+		if(linkCountToDecrement > 0)
+		{
+			for(int linkIndex = 0; linkIndex < numLinksUsed; linkIndex++)
+			{
+				for(int dependencyIndex = 0; dependencyIndex < numDependencies; dependencyIndex++)
+				{
+					if(linkNumbersToDecrement[linkIndex][dependencyIndex] != -1)
+					{
+						LinkInfo *currLink = &linksUsed[linkIndex];
+						currLink->numUsing--;
+						RemoveIDInfoByID(linkNumbersToDecrement[linkIndex][dependencyIndex], currLink->firstUsing, currLink->lastUsing);
+						decrementIndex++;
+
+						if(decrementIndex == linkCountToDecrement)
+							break;
+					}
+				}
+				
+				if(decrementIndex == linkCountToDecrement)
+					break;
+			}
+		}
+
+		int incrementIndex = 0;
+
+		if(linkCountToIncrement > 0)
+		{
+			for(int linkIndex = 0; linkIndex < numLinksUsed; linkIndex++)
+			{
+				for(int dependencyIndex = 0; dependencyIndex < numDependencies; dependencyIndex++)
+				{
+					if(linkNumbersToIncrement[linkIndex][dependencyIndex] != -1)
+					{
+						LinkInfo *currLink = &linksUsed[linkIndex];
+						currLink->numUsing++;
+						currLink->lastUsing = AddIDInfo(linkNumbersToIncrement[linkIndex][dependencyIndex], currLink->firstUsing, currLink->lastUsing);
+						if(currLink->firstUsing == NULL)
+							currLink->firstUsing = currLink->lastUsing;
+						incrementIndex++;
+
+						if(incrementIndex == linkCountToIncrement)
+							break;
+					}
+				}
+
+				if(incrementIndex == linkCountToIncrement)
+					break;
 			}
 		}
 
