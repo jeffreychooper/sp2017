@@ -854,6 +854,31 @@ void CalculateTimeRequirements()
 		}
 
 		// check that at least one node or link has work to do
+		int stillWorking = 0;
+
+		for(int nodeIndex = 0; nodeIndex < numNodesUsed; nodeIndex++)
+		{
+			if(nodesUsed[nodeIndex].numUsing > 0)
+			{
+				stillWorking = 1;
+				break;
+			}
+		}
+
+		if(!stillWorking)
+		{
+			for(int linkIndex = 0; linkIndex < numLinksUsed; linkIndex++)
+			{
+				if(linksUsed[linkIndex].numUsing > 0)
+				{
+					stillWorking = 1;
+					break;
+				}
+			}
+		}
+
+		if(!stillWorking)
+			done = 1;
 	}
 }
 
