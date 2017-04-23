@@ -57,22 +57,24 @@ typedef struct
 
 typedef struct
 {
-	int linkID;
+	int module1;			// set
+	int module2;			// set
+	int linkID;				// set
 	double startTime;
 	double timeToTransfer;
-	double remainingData;
-	double remainingDelay;
+	double remainingData;	// set
+	double remainingDelay;	// set
 } TransferInfo;
 
 typedef struct
 {
-	int moduleID;
-	IDListInfo *firstDependency;
-	IDListInfo *lastDependency;
-	int *dependencyMet;
+	int moduleID;					// set
+	IDListInfo *firstDependency;	// set (possibly null)
+	IDListInfo *lastDependency;		// set (possibly null)
+	int *dependencyMet;				// set (possibly null)
 	double startTime;
 	double timeToExecute;
-	double remainingComputation;
+	double remainingComputation;	// set
 } ExecutionInfo;
 
 // variables found in the user provided files
@@ -82,11 +84,11 @@ int numNodes;
 NodeInfo *nodeInfo;
 
 // variables for keeping track of state
-int numLinksUsed;			// done
-int numNodesUsed;			// done
-int numDependencies;		// done
-LinkInfo *linksUsed;		// done
-NodeInfo *nodesUsed;		// done
+int numLinksUsed;
+int numNodesUsed;
+int numDependencies;
+LinkInfo *linksUsed;
+NodeInfo *nodesUsed;
 TransferInfo *transferInfo;
 ExecutionInfo *executionInfo;
 
@@ -406,6 +408,8 @@ void PrepareStateVariables()
 				if(foundLinks[linkIndex][0] == currModule.node && foundLinks[linkIndex][1] == currModule.dependentNodes[dependentIndex])
 					transferInfo[transferIndex].linkID = linkIndex;
 
+			transferInfo[transferIndex].module1 = currModule.id;
+			transferInfo[transferIndex].module2 = currModule.dependentModules[dependentIndex];
 			transferInfo[transferIndex].remainingData = currModule.dataToProvide[dependentIndex];
 			transferInfo[transferIndex].remainingDelay = currModule.dependentDelays[dependentIndex];
 
@@ -467,12 +471,19 @@ void CalculateTimeRequirements()
 	// BUT IT ISN'T ON THE LINK WHEN THE DELAY IS HAPPENING DUMBASS
 	// should check when a new transfer would begin if it needs to actually move nodes... if not it's instant
 
-	// time = 0.0
-	// done = 0
+	double currentTime = 0.0;
+	int done = 0;
 	
 	// begin on module 0, which immediately begins transferring data to its dependents
 	// mark the needed links as in use
 	// increment the number in the currently used links/nodes and build the list of indices in the tables
+	executionInfo[0].startTime = currentTime;
+	executionInfo[0].timeToExecute = currentTime;
+
+	for(int transferIndex = 0; transferIndex < numDependencies; transferIndex++)
+	{
+		
+	}
 	
 	// while not done
 		// NOTE: HAVE TO DO TRANSFERS AND EXECUTIONS AT SAME TIME
