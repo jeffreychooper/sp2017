@@ -57,9 +57,9 @@ typedef struct
 
 typedef struct
 {
+	int linkID;				// set
 	int module1;			// set
 	int module2;			// set
-	int linkID;				// set
 	double startTime;
 	double timeToTransfer;
 	double remainingData;	// set
@@ -482,7 +482,16 @@ void CalculateTimeRequirements()
 
 	for(int transferIndex = 0; transferIndex < numDependencies; transferIndex++)
 	{
-		
+		TransferInfo currTransfer = transferInfo[transferIndex];
+		if(currTransfer.module1 == 0)
+		{
+			linksUsed[currTransfer.linkID].numUsing++;
+
+			linksUsed[currTransfer.linkID].lastUsing = AddIDInfo(transferIndex, linksUsed[currTransfer.linkID].firstUsing, linksUsed[currTransfer.linkID].lastUsing);
+
+			if(linksUsed[currTransfer.linkID].firstUsing == NULL)
+				linksUsed[currTransfer.linkID].firstUsing = linksUsed[currTransfer.linkID].lastUsing;
+		}
 	}
 	
 	// while not done
