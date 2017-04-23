@@ -573,6 +573,30 @@ void CalculateTimeRequirements()
 		currTime += shortestTime;
 
 		// calculate the amount of data or compuation time left for each transfer or execution
+		int nodeCountToDecrement = 0;
+		int nodeNumbersToDecrement[numNodesUsed][numModules];
+		int linkCountToDecrement = 0;
+		int linkNumbersToDecrement[numLinksUsed][numDependencies];
+		int linkCountToIncrement = 0;
+		int linkNumbersToIncrement[numLinksUsed][numDependencies];
+
+		for(int nodeIndex = 0; nodeIndex < numNodesUsed; nodeIndex++)
+		{
+			for(int moduleIndex = 0; moduleIndex < numModules; moduleIndex++)
+			{
+				nodeNumbersToDecrement[nodeIndex][moduleIndex] = -1;
+			}
+		}
+
+		for(int linkIndex = 0; linkIndex < numLinksUsed; linkIndex++)
+		{
+			for(int dependencyIndex = 0; dependencyIndex < numDependencies; dependencyIndex++)
+			{
+				linkNumbersToDecrement[linkIndex][dependencyIndex] = -1;
+				linkNumbersToIncrement[linkIndex][dependencyIndex] = -1;
+			}
+		}
+
 		for(int executionIndex = 0; executionIndex < numModules; executionIndex++)
 		{
 			ExecutionInfo *currExecution = &executionInfo[executionIndex];
@@ -581,12 +605,14 @@ void CalculateTimeRequirements()
 			if(currExecution->startTime < currTime && currExecution->endTime > currTime)
 			{
 				NodeInfo currNode;
+				int currNodeIndex;
 
 				for(int nodeIndex = 0; nodeIndex < numNodesUsed; nodeIndex++)
 				{
 					if(nodesUsed[nodeIndex].id == currModule.node)
 					{
 						currNode = nodesUsed[nodeIndex];
+						currNodeIndex = nodeIndex;
 						break;
 					}
 				}
@@ -596,7 +622,27 @@ void CalculateTimeRequirements()
 
 				currExecution->remainingComputation -= moduleComputation;
 
-				// TODO: check if it finished and do necessary stuff
+				if(currExecution->remainingComputation <= 0)
+				{
+					nodeNumbersToDecrement[currNodeIndex][nodeCountToDecrement] = currModule.id;
+					nodeCountToDecrement++;
+
+					for(int dependentIndex = 0; dependentIndex < currModule.numDependents; dependentIndex++)
+					{
+						TransferInfo *dependentTransfer;
+
+						for(int transferIndex = 0; transferIndex < numDependencies; transferIndex++)
+						{
+							if(transferInfo[transferIndex].module1 == currModule.id && transferInfo[transferIndex].module2 == currModule.dependentModules[dependentIndex])
+							{
+								dependentTransfer = &transferInfo[transferIndex];
+								break;
+							}
+						}
+
+						dependentTransfer->startTime = currTime;
+					}
+				}
 			}
 		}
 
@@ -608,7 +654,13 @@ void CalculateTimeRequirements()
 			{
 				currTransfer->remainingDelay -= shortestTime;
 
-				// TODO: check if it finished and do necessary stuff
+				if(currTransfer->remainingDelay <= 0)
+				{
+					currTransfer->startTime = currTime;
+
+					linkNumbersToIncrement[currTransfer->linkID][linkCountToIncrement] = transferIndex;
+					linkCountToIncrement++;
+				}
 			}
 			else if(currTransfer->startTime <= currTime && currTransfer->endTime > currTime)
 			{
