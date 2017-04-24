@@ -1,3 +1,4 @@
+// TODO: Figure out real issue behind map3, net15, task10 infinite loop... hacked to fix at line 821
 // TODO: All sorts of efficiency issues... Triple loops everywhere :|
 #include <stdio.h>
 #include <stdlib.h>
@@ -484,11 +485,6 @@ void PrepareStateVariables()
 // TODO: Not doing multiple runs together right now...
 void CalculateTimeRequirements()
 {
-	// !!!!!!!!!!!!!!!!!!!REMEMBER YOU FUCKING IDIOT!!!!!!!!!!!!!!!!!!!!!
-	// delay is only added once to a transfer... at the beginning
-	// BUT IT ISN'T ON THE LINK WHEN THE DELAY IS HAPPENING DUMBASS
-	// should check when a new transfer would begin if it needs to actually move nodes... if not it's instant
-
 	double currTime = 0.0;
 	int done = 0;
 	
@@ -818,6 +814,33 @@ void CalculateTimeRequirements()
 				{
 					stillWorking = 1;
 					break;
+				}
+			}
+		}
+
+		// hacked check for finished...
+		if(stillWorking)
+		{
+			stillWorking = 0;
+
+			for(int executionIndex = 0; executionIndex < numModules; executionIndex++)
+			{
+				if(executionInfo[executionIndex].remainingComputation > 0)
+				{
+					stillWorking = 1;
+					break;
+				}
+			}
+
+			if(!stillWorking)
+			{
+				for(int transferIndex = 0; transferIndex < numDependencies; transferIndex++)
+				{
+					if(transferInfo[transferIndex].remainingData > 0)
+					{
+						stillWorking = 1;
+						break;
+					}
 				}
 			}
 		}
