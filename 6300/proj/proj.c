@@ -99,6 +99,7 @@ void ErrorCheck(int val, char *str);
 int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile);
 void PrepareStateVariables();
 void CalculateTimeRequirements();
+void CreateOutputFile();
 IDListInfo *AddIDInfo(int id, IDListInfo *first, IDListInfo *last);
 void RemoveIDInfo(IDListInfo **info, IDListInfo **first, IDListInfo **last);
 void RemoveIDInfoByID(int id, IDListInfo **first, IDListInfo **last);
@@ -132,6 +133,8 @@ int main(int argc, char *argv[])
 	PrepareStateVariables();
 
 	CalculateTimeRequirements();
+
+	CreateOutputFile();
 
 	// clear any remaining memory
 
@@ -822,6 +825,37 @@ void CalculateTimeRequirements()
 		if(!stillWorking)
 			done = 1;
 	}
+}
+
+void CreateOutputFile()
+{
+	FILE *outputFile = fopen("distOutput.txt", "w");
+
+	fprintf(outputFile, "NODES\n");
+	for(int i = 0; i < numNodesUsed; i++)
+	{
+		fprintf(outputFile, "%d\n", nodesUsed[i].id);
+	}
+
+	fprintf(outputFile, "MODULES\n");
+	for(int i = 0; i < numModules; i++)
+	{
+		fprintf(outputFile, "%d\t%d\n", moduleInfo[i].id, moduleInfo[i].node);
+	}
+
+	fprintf(outputFile, "EXECUTION\n");
+	for(int i = 0; i < numModules; i++)
+	{
+		fprintf(outputFile, "%d\t%f\t%f\n", executionInfo[i].moduleID, executionInfo[i].startTime, executionInfo[i].endTime);
+	}
+
+	fprintf(outputFile, "TRANSFER\n");
+	for(int i = 0; i < numDependencies; i++)
+	{
+		fprintf(outputFile, "%d\t%d\t%f\t%f\n", transferInfo[i].module1, transferInfo[i].module2, transferInfo[i].startTime, transferInfo[i].endTime);
+	}
+
+	fclose(outputFile);
 }
 
 IDListInfo *AddIDInfo(int id, IDListInfo *first, IDListInfo *last)
