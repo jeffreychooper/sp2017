@@ -632,17 +632,26 @@ void CalculateTimeRequirements()
 					for(int dependentIndex = 0; dependentIndex < currModule.numDependents; dependentIndex++)
 					{
 						TransferInfo *dependentTransfer;
+						int dependentTransferIndex;
 
 						for(int transferIndex = 0; transferIndex < numDependencies; transferIndex++)
 						{
 							if(transferInfo[transferIndex].module1 == currModule.id && transferInfo[transferIndex].module2 == currModule.dependentModules[dependentIndex])
 							{
 								dependentTransfer = &transferInfo[transferIndex];
+								dependentTransferIndex = transferIndex;
 								break;
 							}
 						}
 
 						dependentTransfer->startTime = currTime;
+
+						LinkInfo *dependentLink = &linksUsed[dependentTransfer->linkID];
+
+						dependentLink->numUsing++;
+						dependentLink->lastUsing = AddIDInfo(dependentTransferIndex, dependentLink->firstUsing, dependentLink->lastUsing);
+						if(dependentLink->firstUsing == NULL)
+							dependentLink->firstUsing = dependentLink->lastUsing;
 					}
 				}
 			}
@@ -687,6 +696,22 @@ void CalculateTimeRequirements()
 					if(dependentExecution->firstDependency == NULL)
 					{
 						dependentExecution->startTime = currTime;
+
+						NodeInfo *dependentNode;
+						
+						for(int nodeIndex = 0; nodeIndex < numNodesUsed; nodeIndex++)
+						{
+							if(nodesUsed[nodeIndex].id == moduleInfo[dependentExecution->moduleID].node)
+							{
+								dependentNode = &nodesUsed[nodeIndex];
+								break;
+							}
+						}
+
+						dependentNode->numUsing++;
+						dependentNode->lastUsing = AddIDInfo(moduleInfo[dependentExecution->moduleID].node, dependentNode->firstUsing, dependentNode->lastUsing);
+						if(dependentNode->firstUsing == NULL)
+							dependentNode->firstUsing = dependentNode->lastUsing;
 					}
 				}
 			}
