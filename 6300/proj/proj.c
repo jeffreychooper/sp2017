@@ -100,8 +100,8 @@ int GetInfoFromFiles(FILE *mapFile, FILE *networkGraphFile, FILE *taskGraphFile)
 void PrepareStateVariables();
 void CalculateTimeRequirements();
 IDListInfo *AddIDInfo(int id, IDListInfo *first, IDListInfo *last);
-void RemoveIDInfo(IDListInfo *info, IDListInfo *first, IDListInfo *last);
-void RemoveIDInfoByID(int id, IDListInfo *first, IDListInfo *last);
+void RemoveIDInfo(IDListInfo **info, IDListInfo **first, IDListInfo **last);
+void RemoveIDInfoByID(int id, IDListInfo **first, IDListInfo **last);
 
 int main(int argc, char *argv[])
 {
@@ -682,7 +682,7 @@ void CalculateTimeRequirements()
 
 					ExecutionInfo *dependentExecution = &executionInfo[currTransfer->module2];
 
-					RemoveIDInfoByID(currTransfer->module1, dependentExecution->firstDependency, dependentExecution->lastDependency);
+					RemoveIDInfoByID(currTransfer->module1, &dependentExecution->firstDependency, &dependentExecution->lastDependency);
 
 					if(dependentExecution->firstDependency == NULL)
 					{
@@ -692,90 +692,7 @@ void CalculateTimeRequirements()
 			}
 		}
 
-		// place the time value for the shortest transfer or execution in the array to signal its completion
-		// remove the finished one from its link/node (or add it if the delay just finished)
-		if(shortestIsDelay)
-		{
-			TransferInfo *currTransfer = &transferInfo[shortestIndex];
-
-			currTransfer->remainingDelay = 0.0;
-			currTransfer->startTime = currTime;
-
-			linksUsed[currTransfer->linkID].numUsing++;
-
-			linksUsed[currTransfer->linkID].lastUsing = AddIDInfo(shortestIndex, linksUsed[currTransfer->linkID].firstUsing, linksUsed[currTransfer->linkID].lastUsing);
-			if(linksUsed[currTransfer->linkID].firstUsing == NULL)
-				linksUsed[currTransfer->linkID].firstUsing = linksUsed[currTransfer->linkID].lastUsing;
-		}
-		else if(shortestIsTransfer)
-		{
-			TransferInfo *currTransfer = &transferInfo[shortestIndex];
-
-			currTransfer->remainingData = 0.0;
-			currTransfer->endTime = currTime;
-
-			linksUsed[currTransfer->linkID].numUsing--;
-			RemoveIDInfoByID(shortestIndex, linksUsed[currTransfer->linkID].firstUsing, linksUsed[currTransfer->linkID].lastUsing);
-		}
-		else
-		{
-			ExecutionInfo *currExecution = &executionInfo[shortestIndex];
-
-			currExecution->remainingComputation =  0.0;
-			currExecution->endTime = currTime;
-
-			NodeInfo *currNode;
-			for(int nodeIndex = 0; nodeIndex < numNodesUsed; nodeIndex++)
-			{
-				if(nodesUsed[nodeIndex].id == moduleInfo[shortestIndex].node)
-				{
-					currNode = &nodesUsed[nodeIndex];
-				}
-			}
-
-			currNode->numUsing--;
-			RemoveIDInfoByID(shortestIndex, currNode->firstUsing, currNode->lastUsing);
-		}
-
-		// check if the completion of the transfer/execution allows something else to start
-		if(!shortestIsDelay)
-		{
-			if(shortestIsTransfer)
-			{
-				TransferInfo currTransfer = transferInfo[shortestIndex];
-				ExecutionInfo *dependentExecution = &executionInfo[currTransfer.module2];
-
-				RemoveIDInfoByID(currTransfer.module1, dependentExecution->firstDependency, dependentExecution->lastDependency);
-
-				if(dependentExecution->firstDependency == NULL)
-				{
-					dependentExecution->startTime = currTime;
-				}
-			}
-			else
-			{
-				ExecutionInfo currExecution = executionInfo[shortestIndex];
-				ModuleInfo currModule = moduleInfo[shortestIndex];
-				
-				for(int dependentIndex = 0; dependentIndex < currModule.numDependents; dependentIndex++)
-				{
-					TransferInfo *dependentTransfer;
-
-					for(int transferIndex = 0; transferIndex < numDependencies; transferIndex++)
-					{
-						if(transferInfo[transferIndex].module1 == currModule.id && transferInfo[transferIndex].module2 == currModule.dependentModules[dependentIndex])
-						{
-							dependentTransfer = &transferInfo[transferIndex];
-							break;
-						}
-					}
-
-					dependentTransfer->startTime = currTime;
-				}
-			}
-		}
-
-		// remove the "non-shortest" that finished from links/nodes
+		// remove the finished from links/nodes
 		int decrementIndex = 0;
 
 		if(nodeCountToDecrement > 0)
@@ -788,7 +705,7 @@ void CalculateTimeRequirements()
 					{
 						NodeInfo *currNode = &nodesUsed[nodeIndex];
 						currNode->numUsing--;
-						RemoveIDInfoByID(nodeNumbersToDecrement[nodeIndex][moduleIndex], currNode->firstUsing, currNode->lastUsing);
+						RemoveIDInfoByID(nodeNumbersToDecrement[nodeIndex][moduleIndex], &currNode->firstUsing, &currNode->lastUsing);
 						decrementIndex++;
 
 						if(decrementIndex == nodeCountToDecrement)
@@ -813,7 +730,7 @@ void CalculateTimeRequirements()
 					{
 						LinkInfo *currLink = &linksUsed[linkIndex];
 						currLink->numUsing--;
-						RemoveIDInfoByID(linkNumbersToDecrement[linkIndex][dependencyIndex], currLink->firstUsing, currLink->lastUsing);
+						RemoveIDInfoByID(linkNumbersToDecrement[linkIndex][dependencyIndex], &currLink->firstUsing, &currLink->lastUsing);
 						decrementIndex++;
 
 						if(decrementIndex == linkCountToDecrement)
@@ -906,36 +823,38 @@ IDListInfo *AddIDInfo(int id, IDListInfo *first, IDListInfo *last)
 	return newInfo;
 }
 
-void RemoveIDInfo(IDListInfo *info, IDListInfo *first, IDListInfo *last)
+void RemoveIDInfo(IDListInfo **info, IDListInfo **first, IDListInfo **last)
 {
-	if(info == first)
+	if(*info == *first)
 	{
-		first = NULL;
-		last = NULL;
+		*first = (*first)->nextInfoPointer;
+
+		if((*first) == NULL)
+			*last = NULL;
 	}
-	else if(info == last)
+	else if(*info == *last)
 	{
-		last = info->prevInfoPointer;
-		last->nextInfoPointer = NULL;
+		*last = (*info)->prevInfoPointer;
+		(*last)->nextInfoPointer = NULL;
 	}
 	else
 	{
-		info->prevInfoPointer->nextInfoPointer = info->nextInfoPointer;
-		info->nextInfoPointer->prevInfoPointer = info->prevInfoPointer;
+		(*info)->prevInfoPointer->nextInfoPointer = (*info)->nextInfoPointer;
+		(*info)->nextInfoPointer->prevInfoPointer = (*info)->prevInfoPointer;
 	}
 
-	free(info);
+	free(*info);
 }
 
-void RemoveIDInfoByID(int id, IDListInfo *first, IDListInfo *last)
+void RemoveIDInfoByID(int id, IDListInfo **first, IDListInfo **last)
 {
-	IDListInfo *currInfo = first;
+	IDListInfo *currInfo = *first;
 
 	while(currInfo != NULL)
 	{
 		if(currInfo->id == id)
 		{
-			RemoveIDInfo(currInfo, first, last);
+			RemoveIDInfo(&currInfo, first, last);
 			return;
 		}
 
